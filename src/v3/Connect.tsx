@@ -1,9 +1,11 @@
 // For developers: Exit Guard is a tool other agents call. The website is one client of it.
-const MCP = 'claude mcp add --transport http exit-guard http://localhost:5173/mcp'
-const ASK = `curl -X POST http://localhost:5173/api/agent \\
+// Commands use the address this page is served from, so they work wherever the dev server runs.
+const ORIGIN = location.origin
+const MCP = `claude mcp add --transport http exit-guard ${ORIGIN}/mcp`
+const ASK = `curl -X POST ${ORIGIN}/api/agent \\
   -H 'Content-Type: application/json' \\
   -d '{"text": "buy 50 XRP of SOLO"}'`
-const CHECK = `curl "http://localhost:5173/api/check?currency=SOLO&issuer=rsoLo2S1kiGeCcn6hCUXVrCpGMWLrRrLZz&amount=50"`
+const CHECK = `curl "${ORIGIN}/api/check?currency=SOLO&issuer=rsoLo2S1kiGeCcn6hCUXVrCpGMWLrRrLZz&amount=50"`
 const REPLY = `{
   "outcome": "REQUIRE_APPROVAL",
   "action": { "choice": "human", "by": "jev", "confidence": 0.64 },

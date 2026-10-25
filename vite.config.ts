@@ -49,4 +49,33 @@ function api(): Plugin {
 }
 
 // Tailscale serve proxies the team's tailnet URL to this dev server; allow that host only.
-export default defineConfig({ plugins: [react(), api()], server: { allowedHosts: ['.ts.net'] } })
+// /mcp: the same pipeline as an MCP server (JSON-RPC over HTTP POST), for agents like Claude Code.
+function mcp(): Plugin {
+  return {
+    name: 'exit-guard-mcp',
+    configureServer(server) {
+      server.middlewares.use('/mcp', async (req, res) => {
+        let out: { status: number; body?: unknown }
+        try {
+          if (req.method !== 'POST') out = { status: 405, body: { error: 'Use POST (MCP Streamable HTTP).' } }
+          else {
+            let text = ''
+            for await (const chunk of req) text += chunk
+            const all = loadEnv(server.config.mode, server.config.root, '')
+            const env = { ANTHROPIC_API_KEY: all.ANTHROPIC_API_KEY, AI_GATEWAY_API_KEY: all.AI_GATEWAY_API_KEY, JEV_MODEL: all.JEV_MODEL }
+            const mod = await server.ssrLoadModule('/src/api/mcp.ts')
+            out = await mod.mcpFromBody(JSON.parse(text || '{}'), env)
+          }
+        } catch (e) {
+          out = { status: 200, body: { jsonrpc: '2.0', id: null, error: { code: -32700, message: (e as Error).message } } }
+        }
+        res.statusCode = out.status
+        if (out.body === undefined) return res.end()
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify(out.body))
+      })
+    },
+  }
+}
+
+export default defineConfig({ plugins: [react(), api(), mcp()], server: { allowedHosts: ['.ts.net'] } })
