@@ -60,7 +60,7 @@ export function signLine(c: Check, s: Snapshot, req: BuyRequest): string {
     case 'R7':
       return s.transferFee > 0 ? `The issuer keeps ${pct(s.transferFee)} of every sale.` : 'No fee on sales.'
     case 'R8':
-      return `${xrp} is ${c.status === 'pass' ? 'under' : 'over'} the ${DEFAULT_POLICY.autoLimitXrp} XRP auto-limit.`
+      return `${xrp} is ${c.status === 'pass' ? 'under' : 'over'} the ${DEFAULT_POLICY.autoLimitXrp} XRP limit for automatic buys.`
     default:
       return c.detail
   }
@@ -99,7 +99,7 @@ export function evidence(id: string, s: Snapshot, wallet: boolean): string {
     case 'R7':
       return s.transferFee > 0 ? `TransferRate: ${Math.round((1 + s.transferFee) * 1e9)}` : 'TransferRate: not set'
     case 'R8':
-      return `auto-limit: ${DEFAULT_POLICY.autoLimitXrp} XRP`
+      return `automatic buy limit: ${DEFAULT_POLICY.autoLimitXrp} XRP`
     default:
       return ''
   }

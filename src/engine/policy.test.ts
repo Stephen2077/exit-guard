@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { exitCost } from './amm'
+import { exitCost, maxSafeBuy } from './amm'
 import { DEFAULT_POLICY, evaluate, type Snapshot } from './policy'
 
 const token = { currency: 'GOD', issuer: 'rGood' }
@@ -76,10 +76,23 @@ describe('evaluate', () => {
     expect(evaluate(shallow, { token, amountXrp: 8 }).outcome).toBe('DENY')
   })
 
-  it('trusted issuer turns clawback/freeze into pass, but a live freeze still DENYs', () => {
+  it('trusted issuer: freeze power passes, clawback needs approval, a live freeze still DENYs', () => {
     const p = { ...DEFAULT_POLICY, trustedIssuers: ['rGood'] }
     const s = { ...safe, noFreeze: false, clawback: true }
-    expect(evaluate(s, { token, amountXrp: 1 }, p).outcome).toBe('ALLOW')
+    expect(evaluate(s, { token, amountXrp: 1 }, p).outcome).toBe('REQUIRE_APPROVAL')
     expect(evaluate({ ...s, globalFreeze: true }, { token, amountXrp: 1 }, p).outcome).toBe('DENY')
+  })
+})
+
+describe('maxSafeBuy', () => {
+  it('finds the size where exit cost reaches the line, and nothing above it passes', () => {
+    const pool = { token: 50000, xrp: 50, fee: 0.005 }
+    const m = maxSafeBuy(pool, 0.05)
+    expect(exitCost(pool, m).cost).toBeCloseTo(0.05, 4)
+    expect(exitCost(pool, m * 1.01).cost).toBeGreaterThan(0.05)
+  })
+  it('is 0 when even a tiny trade costs more than the line, or there is no pool', () => {
+    expect(maxSafeBuy({ token: 100, xrp: 100, fee: 0.1 }, 0.05)).toBe(0)
+    expect(maxSafeBuy({ token: 0, xrp: 0, fee: 0 }, 0.05)).toBe(0)
   })
 })

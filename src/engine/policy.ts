@@ -36,7 +36,7 @@ export const DEFAULT_POLICY: Policy = {
   maxIssuerLpShare: 0.5,
   warnTransferFee: 0.01,
   maxTransferFee: 0.1,
-  trustedIssuers: [],
+  trustedIssuers: ['rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De'], // RLUSD (Ripple USD)
 }
 
 export type CheckStatus = 'pass' | 'warn' | 'fail'
@@ -60,14 +60,15 @@ export function evaluate(s: Snapshot, req: BuyRequest, p: Policy = DEFAULT_POLIC
   else add('R2', 'Can freeze later', 'warn', 'Issuer can freeze your tokens at any time.')
 
   if (!s.clawback) add('R3', 'Can take tokens back', 'pass', 'Issuer cannot claw back.')
-  else if (trusted) add('R3', 'Can take tokens back', 'pass', 'Clawback is on, but issuer is on your trusted list.')
+  // A regulated stablecoin keeps clawback for compliance: a human should know, but it is not a trap.
+  else if (trusted) add('R3', 'Can take tokens back', 'warn', 'Clawback is on. The issuer is a regulated stablecoin on your trusted list.')
   else add('R3', 'Can take tokens back', 'fail', 'Issuer can pull tokens out of your wallet.')
 
   if (s.top1Share === null) add('R4', 'Holder concentration', 'pass', 'Not enough other holders to judge.')
   else if (s.top1Share > p.maxTop1Share) add('R4', 'Holder concentration', 'warn', `One wallet holds ${pct(s.top1Share)} of supply.`)
   else add('R4', 'Holder concentration', 'pass', `Largest holder: ${pct(s.top1Share)}.`)
 
-  if (!s.pool) add('R5', 'Exit cost', 'fail', 'No AMM pool. There is nowhere to sell.')
+  if (!s.pool) add('R5', 'Exit cost', 'fail', 'No AMM pool to sell into. Order books are not checked yet.')
   else {
     const e = exitCost(s.pool, req.amountXrp)
     if (!Number.isFinite(e.cost) || !(req.amountXrp > 0)) add('R5', 'Exit cost', 'fail', 'Could not price the exit (empty pool or bad amount).')
@@ -87,8 +88,8 @@ export function evaluate(s: Snapshot, req: BuyRequest, p: Policy = DEFAULT_POLIC
   else if (s.transferFee > p.warnTransferFee) add('R7', 'Transfer fee', 'warn', `Issuer takes ${pct(s.transferFee)} of every sale.`)
   else add('R7', 'Transfer fee', 'pass', s.transferFee > 0 ? `Issuer takes ${pct(s.transferFee)} of every sale.` : 'No transfer fee.')
 
-  if (req.amountXrp > p.autoLimitXrp) add('R8', 'Amount', 'warn', `${req.amountXrp} XRP is above the ${p.autoLimitXrp} XRP auto-limit.`)
-  else add('R8', 'Amount', 'pass', `${req.amountXrp} XRP is within the ${p.autoLimitXrp} XRP auto-limit.`)
+  if (req.amountXrp > p.autoLimitXrp) add('R8', 'Amount', 'warn', `${req.amountXrp} XRP is above the ${p.autoLimitXrp} XRP limit for automatic buys.`)
+  else add('R8', 'Amount', 'pass', `${req.amountXrp} XRP is within the ${p.autoLimitXrp} XRP limit for automatic buys.`)
 
   // Any fail is final: approval can never override it.
   const outcome: Outcome = checks.some(c => c.status === 'fail')
