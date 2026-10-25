@@ -37,8 +37,8 @@ describe('the sign for SCM', () => {
     expect(d.outcome).toBe('DENY')
     expect(lines).toEqual([
       'The issuer can take tokens back.',
-      'Selling 2 XRP worth loses 22.5%.',
-      'The issuer keeps 25% of every sale.',
+      'AMM sell price impact: 22.5% below the pre-buy spot price.',
+      'Additional token transfer rate: 25%.',
     ])
   })
 
@@ -61,7 +61,15 @@ describe('answerLine', () => {
     const big: Snapshot = { ...scm, clawback: false, pool: { token: 2398667.99, xrp: 21897.7, fee: 0.00766 }, issuerLpShare: 0, transferFee: 0.0001 }
     const checks = evaluate(big, req).checks
     expect(answerLine(checks.find(c => c.id === 'R5')!, big, req)).toContain('(pool: 21,897.7 XRP)')
-    expect(answerLine(checks.find(c => c.id === 'R7')!, big, req)).toBe('Issuer takes 0.01% of every sale.')
+    expect(answerLine(checks.find(c => c.id === 'R7')!, big, req)).toContain('Transfers between holders debit an additional 0.01% in tokens.')
+  })
+
+  it('does not describe an unchecked wallet as frozen or a holder sample as full supply', () => {
+    const unknown: Snapshot = { ...scm, myLineFrozen: null, top1Share: null }
+    const checks = evaluate(unknown, req).checks
+    expect(signLine(checks.find(c => c.id === 'R1')!, unknown, req)).toBe('Wallet-specific freeze status is unknown.')
+    expect(signLine(checks.find(c => c.id === 'R4')!, unknown, req)).toBe('Holder distribution is unknown.')
+    expect(signLine(checks.find(c => c.id === 'R6')!, { ...unknown, issuerLpShare: null }, req)).toContain('could not be determined')
   })
 })
 

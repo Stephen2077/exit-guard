@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { short } from '../ui/format'
 import { UI_TIMEOUT_MS, safeIcon, searchTokens, type DirToken } from '../xrpl/directory'
-import { currencyName, parseToken } from '../xrpl/token'
+import { currencyName, parseToken, validateWallet } from '../xrpl/token'
 import { EntrySign, GLYPH, IdleSign } from './Sign'
-import { Questions, TokenFacts } from './Side'
+import { Questions, TokenFacts, QueryEvidence } from './Side'
 import type { Entry, Guard } from './useExitGuard'
 import { SIGN, claimedDomain, issuerTail, num, recentPills } from './words'
 
@@ -49,6 +49,7 @@ export function CheckPage({ g }: { g: Guard }) {
           )}
         </div>
         <aside className="board-side card">
+          {e?.snapshot && <QueryEvidence e={e} />}
           {e && <TokenFacts e={e} />}
           <Questions e={e} empty="Pick a token from the search. The answers show up here, with the ledger values behind them." />
         </aside>
@@ -78,7 +79,7 @@ function RecentChips({ g, current }: { g: Guard; current?: Entry }) {
   function tryExample(code: string, issuer: string) {
     const p = parseToken(code, issuer)
     if (!p.ok || amount === null) return
-    void g.checkToken({ token: p.token, amountXrp: amount }, 'mainnet')
+    void g.checkToken({ token: p.token, amountXrp: amount }, 'mainnet', undefined, g.search.wallet.trim() || null)
     afterRender()
   }
 
@@ -127,7 +128,7 @@ function RecentChips({ g, current }: { g: Guard; current?: Entry }) {
 }
 
 function SearchBar({ g }: { g: Guard }) {
-  const { q, amount, manual, issuer, net, found } = g.search
+  const { q, amount, manual, issuer, wallet, net, found } = g.search
   const set = g.setSearch
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
@@ -192,7 +193,9 @@ function SearchBar({ g }: { g: Guard }) {
     if (xrp === null || !list) return
     setOpen(false)
     setError(null)
-    void g.checkToken({ token: { currency: t.currency, issuer: t.issuer }, amountXrp: xrp }, 'mainnet', { q: q.trim(), top: list[0], holders: t.holders })
+    try {
+      void g.checkToken({ token: { currency: t.currency, issuer: t.issuer }, amountXrp: xrp }, 'mainnet', { q: q.trim(), top: list[0], holders: t.holders }, validateWallet(wallet))
+    } catch (err) { return setError((err as Error).message) }
     afterRender()
   }
 
@@ -202,7 +205,9 @@ function SearchBar({ g }: { g: Guard }) {
     const xrp = amountXrp()
     if (xrp === null) return
     setError(null)
-    void g.checkToken({ token: p.token, amountXrp: xrp }, net)
+    try {
+      void g.checkToken({ token: p.token, amountXrp: xrp }, net, undefined, validateWallet(wallet))
+    } catch (err) { return setError((err as Error).message) }
     afterRender()
   }
 
@@ -295,6 +300,10 @@ function SearchBar({ g }: { g: Guard }) {
           </div>
         )}
       </div>
+      <label className="wallet-query">
+        Your wallet (optional, public address only)
+        <input value={wallet} onChange={event => set({ wallet: event.target.value })} onKeyDown={onExactKey} placeholder="r… — check your own freeze status" spellCheck={false} autoComplete="off" />
+      </label>
       <p className="search-meta" aria-live="polite">
         {searching
           ? 'Searching the directory…'

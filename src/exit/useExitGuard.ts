@@ -31,8 +31,8 @@ export type Entry = {
 export type Searched = { q: string; top: DirToken; holders?: number }
 // What is typed in the search bar. Kept here, not in the page, so switching pages does not lose it.
 export type Found = { q: string; count: number; tokens: DirToken[] }
-export type SearchState = { q: string; amount: string; manual: boolean; issuer: string; net: Net; found: Found | null }
-const EMPTY_SEARCH: SearchState = { q: '', amount: '2', manual: false, issuer: '', net: 'mainnet', found: null }
+export type SearchState = { q: string; amount: string; manual: boolean; issuer: string; wallet: string; net: Net; found: Found | null }
+const EMPTY_SEARCH: SearchState = { q: '', amount: '2', manual: false, issuer: '', wallet: '', net: 'mainnet', found: null }
 export type Trap = { buy: TxRecord[]; freeze?: TxRecord; agentSell?: TxRecord; buyerBuy?: TxRecord; running: boolean; closedAt?: number; error?: string }
 export type DemoView = { kind: 'entry'; id: number } | { kind: 'trap' } | null
 export type Guard = ReturnType<typeof useExitGuard>
@@ -136,13 +136,11 @@ export function useExitGuard() {
   }
 
   // Check any token on either network. Read-only: it never buys.
-  async function checkToken(req: BuyRequest, net: Net, searched?: Searched) {
+  async function checkToken(req: BuyRequest, net: Net, searched?: Searched, wallet: string | null = null) {
     // The same check already on its way (a double Enter): show it instead of reading the ledger twice.
-    const key = `${net}|${req.token.currency}|${req.token.issuer}|${req.amountXrp}`
+    const key = `${net}|${req.token.currency}|${req.token.issuer}|${req.amountXrp}|${wallet ?? ''}`
     const same = reading.current.get(key)
     if (same !== undefined) return setCheckId(same)
-    // The demo agent only exists on testnet. On mainnet there is no wallet of ours to look at.
-    const wallet = net === 'testnet' ? (demo?.agent.address ?? null) : null
     const id = add({ mode: 'check', net, wallet, req, searched, status: 'checking' }, true)
     reading.current.set(key, id)
     // Directory facts (mainnet only) load next to the ledger read. They never change the verdict.
@@ -159,7 +157,7 @@ export function useExitGuard() {
 
   // Try a read again after it failed. Never repeats a buy.
   function retry(e: Entry) {
-    if (e.mode === 'check') return void checkToken(e.req, e.net, e.searched)
+    if (e.mode === 'check') return void checkToken(e.req, e.net, e.searched, e.wallet)
     void agentBuy(e.req, e.station)
   }
 

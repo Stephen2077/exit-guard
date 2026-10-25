@@ -1,12 +1,41 @@
 import type { CSSProperties } from 'react'
-import { exitCost } from '../engine/amm'
+import { exitCost, roundTripQuote } from '../engine/amm'
 import { DEFAULT_POLICY, type BuyRequest, type Check, type Snapshot } from '../engine/policy'
-import { EXPLORER, type TxRecord } from '../xrpl/client'
+import { EXPLORER, EXPLORER_HOST, type TxRecord } from '../xrpl/client'
 import { safeIcon } from '../xrpl/directory'
 import { currencyName } from '../xrpl/token'
 import { GLYPH, fresh } from './Sign'
 import type { Entry, Trap } from './useExitGuard'
-import { QUESTIONS, SIGN, answerLine, claimedDomain, evidence, lookalikeNote, num, pct, resultWords, searchNote } from './words'
+import { LIMITS, QUESTIONS, SIGN, answerLine, claimedDomain, evidence, lookalikeNote, num, pct, resultWords, searchNote } from './words'
+
+export function QueryEvidence({ e }: { e: Entry }) {
+  const s = e.snapshot!
+  const data = s.evidence
+  const frozen = s.poolFrozen || s.globalFreeze || s.myLineFrozen === true
+  const quote = s.pool && !frozen ? roundTripQuote(s.pool, e.req.amountXrp) : null
+  const precise = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 6 })
+  return (
+    <section className="qs query-evidence">
+      <h2>Ledger evidence</h2>
+      <p><b>{currencyName(e.req.token.currency)}</b> · {e.net} · {e.req.amountXrp} XRP</p>
+      <p className="mono wrap">Issuer: {e.req.token.issuer}</p>
+      {data && <p>Ledger <a href={`${EXPLORER_HOST[e.net]}/ledgers/${data.ledgerIndex}`} target="_blank" rel="noreferrer">{data.ledgerIndex}</a> · validated · {new Date(data.queriedAt).toLocaleString()}</p>}
+      <p>{!e.wallet ? 'No wallet provided: your own freeze status was not checked.'
+        : s.myLineFrozen === null ? 'No matching wallet trust line could be checked. Your freeze status remains unknown.'
+          : `Wallet checked: ${e.wallet}`}</p>
+      <h3>AMM model: buy, then sell</h3>
+      {quote ? <p>{e.req.amountXrp} XRP in → <b>{precise(quote.xrpBack)} XRP back</b> · modelled loss {pct(quote.lossFraction)}. Includes pool trading fees, with reserves updated after the buy. This differs from R5’s original-pool price impact.</p>
+        : <p>{frozen ? 'A freeze was detected; no usable sell estimate is shown.' : 'No usable token/XRP AMM estimate. Order books and other pairs were not checked.'}</p>}
+      <p className="small">Mathematical AMM estimate only, not an executable quote. Excludes issuer transfer charges, network fees, rounding and other trades. Permissions may prevent either swap.</p>
+      <details>
+        <summary>Data coverage and raw currency code</summary>
+        <p className="mono wrap">Currency: {e.req.token.currency}{e.req.token.currency.length === 40 && ' (40-character hexadecimal encoding)'}</p>
+        {data && <><p className="mono wrap">Ledger hash: {data.ledgerHash}</p><p>{data.holderLines} trust lines across {data.holderPages} pages. {data.holdersComplete ? 'All issuer pages read.' : 'Partial sample: more pages remain.'}</p></>}
+        <ul>{LIMITS.map(limit => <li key={limit}>{limit}</li>)}</ul>
+      </details>
+    </section>
+  )
+}
 
 export function Questions({ e, empty }: { e?: Entry; empty: string }) {
   if (!e?.decision || !e.snapshot) {
@@ -48,7 +77,7 @@ export function Questions({ e, empty }: { e?: Entry; empty: string }) {
 // Where this trade's exit cost sits against the approval and block lines (scale 0-30%).
 const METER_MAX = 0.3
 function ExitMeter({ s, req, status }: { s: Snapshot; req: BuyRequest; status: Check['status'] }) {
-  if (!s.pool) return null
+  if (!s.pool || s.poolFrozen) return null
   const { cost } = exitCost(s.pool, req.amountXrp)
   if (!Number.isFinite(cost)) return null
   const at = (x: number) => `${Math.min(x / METER_MAX, 1) * 100}%`

@@ -45,6 +45,10 @@ export function ApiPage() {
               <td>The issuer's address (starts with r). Names are not unique: use /api/search to find it.</td>
             </tr>
             <tr>
+              <td>wallet</td>
+              <td>Optional public classic address. Checks this wallet’s trust line; never provide a seed or private key.</td>
+            </tr>
+            <tr>
               <td>amount</td>
               <td>How much XRP the agent would spend. Used for the exit cost and the auto-limit. Default 2.</td>
             </tr>
@@ -55,7 +59,7 @@ export function ApiPage() {
           </tbody>
         </table>
         <p>
-          What to do with <code>outcome</code>: <b>ALLOW</b> buy. <b>REQUIRE_APPROVAL</b> ask a human first. <b>DENY</b> do not buy; this is
+          Policy meaning of <code>outcome</code>: <b>ALLOW</b> no current rule blocked this amount. <b>REQUIRE_APPROVAL</b> review risks or missing data. <b>DENY</b> do not buy; this is
           final. Each check comes with the raw ledger value it used. On mainnet the answer also says whether other tokens use the same code
           (from the token directory).
         </p>

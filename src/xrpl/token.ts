@@ -4,10 +4,24 @@ import type { Token } from '../engine/policy'
 
 const HEX40 = /^[0-9A-Fa-f]{40}$/
 
+export function validateWallet(input: string): string | null {
+  const wallet = input.trim()
+  if (!wallet) return null
+  if (!isValidClassicAddress(wallet)) throw new Error('Wallet must be a public XRPL classic address starting with r.')
+  return wallet
+}
+
 // 3-character codes are stored as-is. Longer codes (like RLUSD) are stored as 40 hex characters: ASCII, zero-padded.
 export function currencyCode(input: string): string {
   const s = input.trim()
-  if (HEX40.test(s)) return s.toUpperCase()
+  if (HEX40.test(s)) {
+    const hex = s.toUpperCase()
+    if (/^0{24}[0-9A-F]{6}0{10}$/.test(hex)) {
+      const standard = String.fromCharCode(...[24, 26, 28].map(offset => parseInt(hex.slice(offset, offset + 2), 16)))
+      if (/^[A-Za-z0-9?!@#$%^&*(){}\[\]|]{3}$/.test(standard)) return standard
+    }
+    return hex
+  }
   if (s.length === 3) return s
   return [...s].map(ch => ch.charCodeAt(0).toString(16).padStart(2, '0')).join('').toUpperCase().padEnd(40, '0')
 }
@@ -30,5 +44,7 @@ export function parseToken(code: string, issuer: string): Parsed {
   if (c.toUpperCase() === 'XRP' || /^0{40}$/.test(c)) return { ok: false, error: 'XRP is the native coin, not an issued token.' }
   if (!HEX40.test(c) && !/^[\x21-\x7E]{1,20}$/.test(c)) return { ok: false, error: 'A token code is 1 to 20 plain characters, or 40 hex characters.' }
   if (!isValidClassicAddress(i)) return { ok: false, error: 'The issuer must be an XRPL address that starts with r.' }
-  return { ok: true, token: { currency: currencyCode(c), issuer: i } }
+  const currency = currencyCode(c)
+  if (currency.toUpperCase() === 'XRP' || /^5852500{34}$/i.test(currency)) return { ok: false, error: 'XRP is the native coin, not an issued token.' }
+  return { ok: true, token: { currency, issuer: i } }
 }
