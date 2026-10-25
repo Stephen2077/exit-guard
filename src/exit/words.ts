@@ -52,7 +52,7 @@ export function signLine(c: Check, s: Snapshot, req: BuyRequest): string {
     case 'R4':
       return s.top1Share === null ? 'Holder distribution is unknown.' : `Largest included holder: ${pct(s.top1Share)} of the balances read${s.evidence?.holdersComplete === false ? ' (partial sample)' : ''}.`
     case 'R5': {
-      if (!s.pool) return 'No AMM pool to sell into. Order books are not counted yet.'
+      if (!s.pool) return 'No AMM pool to sell into (order books not counted).'
       if (s.poolFrozen) return 'This AMM is frozen; no usable sell quote is available.'
       const { cost } = exitCost(s.pool, req.amountXrp)
       return Number.isFinite(cost) ? `AMM sell price impact: ${pct(cost)} below the pre-buy spot price.` : c.detail
@@ -95,7 +95,7 @@ export function evidence(id: string, s: Snapshot, wallet: boolean): string {
     case 'R5':
       return s.pool
         ? `AMM pool ${num(s.pool.token)} ${currencyName(s.token.currency)} / ${num(s.pool.xrp)} XRP · fee ${pct(s.pool.fee)}`
-        : 'no AMM pool · order books are not counted yet'
+        : 'no AMM pool · order books not counted'
     case 'R6':
       return s.issuerLpShare === null ? 'issuer LP share unknown' : `issuer holds ${pct(s.issuerLpShare)} of the LP tokens`
     case 'R7':
@@ -154,6 +154,22 @@ export function searchNote(q: string, top: DirToken, picked: { currency: string;
   const mine = pickedHolders === undefined ? '' : ` This one has ${num(pickedHolders)}.`
   return `You searched "${q}". The most-held match is ${top.name} from ${who}, with ${num(top.holders ?? 0)} holders.${mine} Make sure this is the token you mean.`
 }
+
+// Recent checks as pills: one per token and network, newest first. Copies share a name, so each pill also shows
+// the end of its issuer's address.
+type Checked = { mode: 'agent' | 'check'; net: string; req: { token: { currency: string; issuer: string } } }
+export function recentPills<T extends Checked>(entries: T[], max = 8): T[] {
+  const seen = new Set<string>()
+  return entries
+    .filter(e => {
+      const key = `${e.net}|${e.req.token.currency}|${e.req.token.issuer}`
+      if (e.mode !== 'check' || seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .slice(0, max)
+}
+export const issuerTail = (issuer: string) => `…${issuer.slice(-4)}`
 
 // What a transaction result means, in words. The raw code is still shown next to it.
 export function resultWords(result: string): { ok: boolean; text: string } {

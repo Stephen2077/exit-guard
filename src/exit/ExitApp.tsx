@@ -1,6 +1,5 @@
 // Exit Guard: a tool that checks if a token can be sold before you buy it. The agent demo and the API are the other pages.
-import { useEffect, useState } from 'react'
-import { MAINNET, NETWORK } from '../xrpl/client'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { currencyName } from '../xrpl/token'
 import { ApiPage } from './ApiPage'
 import { CheckPage } from './CheckPage'
@@ -9,10 +8,11 @@ import { useExitGuard } from './useExitGuard'
 import { SIGN } from './words'
 
 type Page = 'check' | 'demo' | 'api'
-const PAGES: { id: Page; label: string }[] = [
-  { id: 'check', label: 'Check a token' },
-  { id: 'demo', label: 'Agent demo' },
-  { id: 'api', label: 'API' },
+// `short` is shown at phone width, so the header stays one row.
+const PAGES: { id: Page; label: string; short: string }[] = [
+  { id: 'check', label: 'Check a token', short: 'Check' },
+  { id: 'demo', label: 'Agent demo', short: 'Demo' },
+  { id: 'api', label: 'API', short: 'API' },
 ]
 const fromHash = (): Page => {
   const h = location.hash.slice(1)
@@ -23,11 +23,25 @@ export default function ExitApp() {
   const g = useExitGuard()
   const [page, setPage] = useState<Page>(fromHash)
 
+  // A new page starts at its top.
   useEffect(() => {
-    const onHash = () => setPage(fromHash())
+    const onHash = () => {
+      setPage(fromHash())
+      window.scrollTo(0, 0)
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
+
+  // The logo goes home: the Check page, with an empty search and no result.
+  // A click with a modifier key (new tab, new window) is left to the browser.
+  function home(ev: MouseEvent) {
+    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return
+    ev.preventDefault()
+    g.goHome()
+    if (page !== 'check') location.hash = '#check' // already on Check: no extra history entry
+    window.scrollTo(0, 0)
+  }
 
   // One short sentence for screen readers when a result arrives.
   const shown = page === 'check' ? g.checkEntry : page === 'demo' ? g.demoEntry : undefined
@@ -37,41 +51,23 @@ export default function ExitApp() {
       ? 'Could not read the ledger.'
       : ''
 
-  function newWallets() {
-    if (window.confirm('Delete the demo wallets and start over? Setting up again takes about a minute.')) g.newWallets()
-  }
-
   return (
     <div className="xg">
       <header className="bar">
-        <div className="brand">
+        <a className="brand" href="#check" onClick={home} aria-label="Exit Guard home">
           Exit Guard
           <span className="built">
             built on <img src="/brand/xrpl-tertiary-black.svg" alt="XRPL" />
           </span>
-        </div>
+        </a>
         <nav className="tabs" aria-label="Pages">
           {PAGES.map(p => (
             <a key={p.id} href={`#${p.id}`} className={page === p.id ? 'on' : ''} aria-current={page === p.id ? 'page' : undefined}>
-              {p.label}
+              <span className="tab-long">{p.label}</span>
+              <span className="tab-short">{p.short}</span>
             </a>
           ))}
         </nav>
-        <div className="net">
-          {page === 'demo' ? (
-            <>
-              <i className={`dot ${g.online === null ? '' : g.online ? 'on' : 'off'}`} />
-              Demo on testnet · {NETWORK.includes('quiknode') ? 'QuickNode' : 'public node'}
-              {g.demo && (
-                <button className="link" onClick={newWallets} disabled={g.demoBusy}>
-                  New demo wallets
-                </button>
-              )}
-            </>
-          ) : (
-            <>Read-only · {g.checkEntry?.net === 'testnet' ? 'testnet' : `mainnet · ${new URL(MAINNET).host}`}</>
-          )}
-        </div>
       </header>
       {page === 'check' ? <CheckPage g={g} /> : page === 'demo' ? <DemoPage g={g} /> : <ApiPage />}
       <p className="sr-only" role="status">

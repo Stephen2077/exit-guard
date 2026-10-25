@@ -1,7 +1,6 @@
 import type { CSSProperties } from 'react'
 import { exitCost, roundTripQuote } from '../engine/amm'
 import { DEFAULT_POLICY, type BuyRequest, type Check, type Snapshot } from '../engine/policy'
-import { short } from '../ui/format'
 import { EXPLORER, EXPLORER_HOST, type TxRecord } from '../xrpl/client'
 import { safeIcon } from '../xrpl/directory'
 import { currencyName } from '../xrpl/token'
@@ -93,6 +92,7 @@ function ExitMeter({ s, req, status }: { s: Snapshot; req: BuyRequest; status: C
 
 const TAG_CLASS = { ALLOW: 'allow', REQUIRE_APPROVAL: 'ask', DENY: 'deny' } as const
 
+// The demo's history: every agent request and the no-guard run.
 export function Recent({
   entries,
   currentId,
@@ -130,9 +130,7 @@ export function Recent({
               >
                 <span className="time">{e.time}</span>
                 <span className="what">
-                  {e.mode === 'agent' ? `Agent · ${name} · ${e.req.amountXrp} XRP` : `${name} · ${short(e.req.token.issuer)}`}
-                  {e.net === 'mainnet' && e.mode === 'agent' && ' · mainnet'}
-                  {e.net === 'testnet' && e.mode === 'check' && ' · testnet'}
+                  Agent · {name} · {e.req.amountXrp} XRP
                 </span>
                 <span className={`tag ${e.decision ? TAG_CLASS[e.decision.outcome] : ''}`}>
                   {e.decision ? SIGN[e.decision.outcome].tag : e.status === 'failed' ? 'ERROR' : '…'}
@@ -184,91 +182,73 @@ export function Receipts({ txs }: { txs: TxRecord[] }) {
   )
 }
 
-const amount = (x?: number) => (x === undefined ? '—' : num(x))
-// Supply and volume can be huge: 100,000,000,000 reads better as 100B in a small box.
-const big = (x?: number) => (x === undefined ? '—' : x.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 2 }))
-const price = (x?: number) => (x === undefined ? '—' : `${x.toLocaleString('en-US', { maximumSignificantDigits: 3 })} XRP`)
+const whole = (x?: number) => (x === undefined ? '—' : num(x))
+// Supply and volume can be huge: 100,000,000,000 reads better as 100B.
+const compact = (x?: number) => (x === undefined ? '—' : x.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 2 }))
+const price = (x?: number) => (x === undefined ? '—' : x.toLocaleString('en-US', { maximumSignificantDigits: 3 }))
 
 // What the token directory says about this token: who issues it, how many hold it, and whether others copy its code.
 export function TokenFacts({ e }: { e: Entry }) {
   if (e.net !== 'mainnet') return null
   const d = e.dir
   const picked = e.searched && searchNote(e.searched.q, e.searched.top, e.req.token, e.searched.holders)
-  const head = (
-    <>
+  const look = d && 'look' in d ? lookalikeNote(e.req.token.issuer, e.req.token.currency, d.look) : null
+  const i = d && 'info' in d ? d.info : null
+  const icon = safeIcon(i?.icon)
+  return (
+    <section className="facts">
       <h2>Token directory</h2>
       {picked && (
-        <p className="look warn" role="alert">
+        <p className="warnbox" role="alert">
           <span className="st warn">!</span>
           {picked}
         </p>
       )}
-    </>
-  )
-  const source = <p className="src">From xrplmeta.org, not read from the ledger. It does not change the verdict.</p>
-  if (!d) {
-    return (
-      <section className="facts">
-        {head}
-        <p className="muted">Looking up names, holders and prices…</p>
-      </section>
-    )
-  }
-  if ('error' in d) {
-    return (
-      <section className="facts">
-        {head}
-        <p className="muted">Could not reach the directory: {d.error}</p>
-      </section>
-    )
-  }
-  const look = lookalikeNote(e.req.token.issuer, e.req.token.currency, d.look)
-  const i = d.info
-  const icon = safeIcon(i?.icon)
-  return (
-    <section className="facts">
-      {head}
-      <p className={`look ${look.warn ? 'warn' : ''}`} role={look.warn ? 'alert' : undefined}>
-        {look.warn && <span className="st warn">!</span>}
-        {look.text}
-      </p>
-      {i ? (
+      {look?.warn && (
+        <p className="warnbox" role="alert">
+          <span className="st warn">!</span>
+          {look.text}
+        </p>
+      )}
+      {!d && <p className="muted">Looking up names, holders and prices…</p>}
+      {d && 'error' in d && <p className="muted">Could not reach the directory: {d.error}</p>}
+      {d && !('error' in d) && !i && <p className="muted">This token is not in the directory.</p>}
+      {i && (
         <>
           <div className="facts-head">
-            {icon ? <img src={icon} alt="" width={36} height={36} referrerPolicy="no-referrer" /> : <span className="noicon" />}
-            <div>
+            {icon ? <img src={icon} alt="" width={32} height={32} referrerPolicy="no-referrer" /> : <span className="noicon" />}
+            <div className="facts-who">
               <b>{i.name}</b> <span className="mono muted">{currencyName(i.currency)}</span>
               <span className="who">
                 {i.issuerName ?? 'Issuer has no name in the directory'}
                 {i.domain && ` · ${claimedDomain(i.domain)}`}
                 {i.kyc && ' · KYC'}
+                {i.trustLevel !== undefined && ` · trust level ${i.trustLevel} of 3`}
               </span>
             </div>
-            {i.trustLevel !== undefined && <span className="lvl">trust level {i.trustLevel} of 3</span>}
           </div>
-          <dl className="nums">
+          <dl className="strip">
             <div>
               <dt>Holders</dt>
-              <dd>{amount(i.holders)}</dd>
+              <dd>{whole(i.holders)}</dd>
             </div>
             <div>
-              <dt>Price</dt>
+              <dt>Price (XRP)</dt>
               <dd>{price(i.priceXrp)}</dd>
             </div>
             <div>
-              <dt>24h volume</dt>
-              <dd>{i.volume24hXrp === undefined ? '—' : `${big(i.volume24hXrp)} XRP`}</dd>
+              <dt>24h volume (XRP)</dt>
+              <dd>{compact(i.volume24hXrp)}</dd>
             </div>
             <div>
               <dt>Supply</dt>
-              <dd>{big(i.supply)}</dd>
+              <dd>{compact(i.supply)}</dd>
             </div>
           </dl>
         </>
-      ) : (
-        <p className="muted">This token is not in the directory.</p>
       )}
-      {source}
+      {look && !look.warn && <p className="note">{look.text}</p>}
+      <p className="note">From xrplmeta.org, not read from the ledger. It does not change the verdict.</p>
     </section>
   )
 }
