@@ -104,4 +104,9 @@ function mcp(): Plugin {
   }
 }
 
-export default defineConfig({ plugins: [react(), api(), mcp()], server: { allowedHosts: ['.ts.net'] } })
+export default defineConfig({
+  plugins: [react(), api(), mcp()],
+  server: { allowedHosts: ['.ts.net'] },
+  // Vercel function bundle (scripts/vercel-build.mjs): one self-contained file, ws's optional native helpers left out.
+  ...(process.env.EG_SSR_BUNDLE ? { ssr: { noExternal: true, target: 'node' as const }, build: { rollupOptions: { external: ['bufferutil', 'utf-8-validate'] } } } : {}),
+})

@@ -3,6 +3,8 @@
 Checks whether an AI agent could sell an XRPL token **before** it buys it.
 A fixed rule engine returns ALLOW (buy automatically), REQUIRE_APPROVAL (a human must click), or DENY (blocked, final).
 
+**Demo video:** https://youtu.be/9JR76WuFass
+
 ## Run
 
 ```bash
