@@ -28,21 +28,24 @@ export function IdleSign({ title, sub, children }: { title: string; sub: string;
   )
 }
 
-function Chips({ e }: { e: Entry }) {
+// What was asked, in one white strip: verdict, token and amount, issuer (links to the explorer), network and time.
+function Meta({ e }: { e: Entry }) {
   const name = currencyName(e.req.token.currency)
   const look = e.dir && 'look' in e.dir ? lookalikeNote(e.req.token.issuer, e.req.token.currency, e.dir.look) : null
   const picked = e.searched && searchNote(e.searched.q, e.searched.top, e.req.token, e.searched.holders)
   return (
-    <div className="chips">
-      {e.decision && <span className="chip mono">{e.decision.outcome}</span>}
-      <span className="chip">{e.mode === 'agent' ? `Agent buys ${name} with ${e.req.amountXrp} XRP` : `${name} · buy with ${e.req.amountXrp} XRP`}</span>
-      <a className="chip mono" href={`${EXPLORER_HOST[e.net]}/accounts/${e.req.token.issuer}`} target="_blank" rel="noreferrer">
-        {short(e.req.token.issuer)}
-      </a>
-      <span className="chip">
-        {e.net === 'mainnet' ? 'Mainnet' : 'Testnet'} · {e.time}
-      </span>
-      {(look?.warn || picked) && <span className="chip warn">! Possible lookalike</span>}
+    <div className="meta">
+      <p className="meta-strip">
+        {e.decision && <b className="mono">{e.decision.outcome}</b>}
+        <span>{e.mode === 'agent' ? `Agent buys ${name} with ${e.req.amountXrp} XRP` : `${name}, buy with ${e.req.amountXrp} XRP`}</span>
+        <a className="mono" href={`${EXPLORER_HOST[e.net]}/accounts/${e.req.token.issuer}`} target="_blank" rel="noreferrer">
+          {short(e.req.token.issuer)}
+        </a>
+        <span>
+          {e.net === 'mainnet' ? 'Mainnet' : 'Testnet'} {e.time}
+        </span>
+      </p>
+      {(look?.warn || picked) && <p className="meta-strip warn">! Possible lookalike</p>}
     </div>
   )
 }
@@ -52,7 +55,7 @@ export function EntrySign({ e, g }: { e: Entry; g: Guard }) {
     if (e.status === 'failed') {
       return (
         <section className="sign dark failed">
-          <Chips e={e} />
+          <Meta e={e} />
           <h1 className="h-mid">Could not read the ledger.</h1>
           <p className="sub" role="alert">
             {e.note}
@@ -67,7 +70,7 @@ export function EntrySign({ e, g }: { e: Entry; g: Guard }) {
     }
     return (
       <section className="sign dark">
-        <Chips e={e} />
+        <Meta e={e} />
         <h1 className="h-mid">Reading the ledger…</h1>
         <p className="sub">The issuer's settings, its pool and its holders.</p>
         <Dots n={8} />
@@ -79,7 +82,7 @@ export function EntrySign({ e, g }: { e: Entry; g: Guard }) {
   const words = onlyNoPool(e.decision, e.snapshot) ? NO_POOL : SIGN[outcome]
   return (
     <section className={`sign ${outcome} ${fresh(e.decidedAt) ? 'fresh' : ''}`}>
-      <Chips e={e} />
+      <Meta e={e} />
       <h1>{words.title}</h1>
       <p className="sub">{words.sub}</p>
       <ul className="why">
@@ -174,9 +177,11 @@ export function SetupSign({ g }: { g: Guard }) {
 export function TrapSign({ trap, busy, onReset }: { trap: Trap; busy: boolean; onReset: () => void }) {
   return (
     <section className={`sign dark trap ${fresh(trap.closedAt) ? 'fresh' : ''}`}>
-      <div className="chips">
-        <span className="chip">No guard</span>
-        <span className="chip">Agent buys SCM with 2 XRP</span>
+      <div className="meta">
+        <p className="meta-strip">
+          <b className="mono">NO GUARD</b>
+          <span>Agent buys SCM with 2 XRP</span>
+        </p>
       </div>
       <h1 className="h-trap">Buyers can get in. The agent can't get out.</h1>
       <ol className="trap-steps">

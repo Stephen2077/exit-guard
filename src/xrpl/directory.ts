@@ -4,7 +4,8 @@ import type { Token } from '../engine/policy'
 import { currencyName } from './token'
 
 const BASE = 'https://s1.xrplmeta.org'
-const TIMEOUT_MS = 8000
+const TIMEOUT_MS = 8000 // the API: an agent waits for the whole answer, so never hold it up for long
+export const UI_TIMEOUT_MS = 15000 // the page: the directory sometimes takes 8 s or more, and the verdict never waits for it
 const SCAN = 50 // how many closest name matches the lookalike check reads
 
 export type DirToken = {
@@ -57,24 +58,24 @@ export function toDirToken(r: Raw): DirToken {
   }
 }
 
-// Every directory call gives up after 8 s, so a slow directory never holds up a verdict.
-const timeout = (signal?: AbortSignal) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS))
+// Every directory call gives up after a time limit, so a slow directory never holds anything up for long.
+const timeout = (ms: number, signal?: AbortSignal) => (signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms))
 
-async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(BASE + path, { signal: timeout(signal) })
+async function get<T>(path: string, signal?: AbortSignal, ms = TIMEOUT_MS): Promise<T> {
+  const res = await fetch(BASE + path, { signal: timeout(ms, signal) })
   if (!res.ok) throw new Error(`Token directory returned ${res.status}`)
   return (await res.json()) as T
 }
 
 // Tokens whose name looks like `q`, most holders first.
-export async function searchTokens(q: string, limit = 12, signal?: AbortSignal): Promise<{ count: number; tokens: DirToken[] }> {
-  const d = await get<{ count: number; tokens: Raw[] }>(`/tokens?name_like=${encodeURIComponent(q)}&sort_by=holders&limit=${limit}`, signal)
+export async function searchTokens(q: string, limit = 12, signal?: AbortSignal, ms = TIMEOUT_MS): Promise<{ count: number; tokens: DirToken[] }> {
+  const d = await get<{ count: number; tokens: Raw[] }>(`/tokens?name_like=${encodeURIComponent(q)}&sort_by=holders&limit=${limit}`, signal, ms)
   return { count: d.count, tokens: d.tokens.map(toDirToken) }
 }
 
 // The directory entry for one token, or null if the directory does not list it.
-export async function tokenInfo(t: Token): Promise<DirToken | null> {
-  const res = await fetch(`${BASE}/token/${encodeURIComponent(t.currency)}:${encodeURIComponent(t.issuer)}`, { signal: timeout() })
+export async function tokenInfo(t: Token, ms = TIMEOUT_MS): Promise<DirToken | null> {
+  const res = await fetch(`${BASE}/token/${encodeURIComponent(t.currency)}:${encodeURIComponent(t.issuer)}`, { signal: timeout(ms) })
   const body = (await res.json().catch(() => null)) as (Raw & { type?: string }) | null
   // An unknown token comes back as 400 with type "entryNotFound".
   if (body?.type === 'entryNotFound') return null
@@ -86,8 +87,8 @@ export async function tokenInfo(t: Token): Promise<DirToken | null> {
 // Only the closest name matches are read: `scanned` of `total`.
 export type Lookalikes = { same: DirToken[]; scanned: number; total: number }
 
-export async function lookalikes(t: Token): Promise<Lookalikes> {
-  const r = await searchTokens(currencyName(t.currency), SCAN)
+export async function lookalikes(t: Token, ms = TIMEOUT_MS): Promise<Lookalikes> {
+  const r = await searchTokens(currencyName(t.currency), SCAN, undefined, ms)
   return { same: r.tokens.filter(x => x.currency === t.currency), scanned: r.tokens.length, total: r.count }
 }
 

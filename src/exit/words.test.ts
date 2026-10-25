@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { evaluate, type Snapshot } from '../engine/policy'
 import type { DirToken } from '../xrpl/directory'
-import { answerLine, evidence, lookalikeNote, onlyNoPool, pct, resultWords, searchNote, signLine, signReasons } from './words'
+import { answerLine, evidence, issuerTail, lookalikeNote, onlyNoPool, pct, recentPills, resultWords, searchNote, signLine, signReasons } from './words'
 
 // The SCM demo token as read from testnet on 2026-10-25: clawback, 25% fee, issuer-owned 5 XRP pool, one whale.
 const scm: Snapshot = {
@@ -52,7 +52,7 @@ describe('the sign for SCM', () => {
   it('says why there is no exit when there is no pool', () => {
     const noPool = { ...scm, pool: null, issuerLpShare: null }
     const r5 = evaluate(noPool, req).checks.find(c => c.id === 'R5')!
-    expect(signLine(r5, noPool, req)).toBe('No AMM pool to sell into. Order books are not counted yet.')
+    expect(signLine(r5, noPool, req)).toBe('No AMM pool to sell into (order books not counted).')
   })
 })
 
@@ -124,6 +124,22 @@ describe('searchNote', () => {
     expect(searchNote('RLUSD', real, mint, 1018)).toBe(
       'You searched "RLUSD". The most-held match is Ripple USD from RLUSD, with 67,878 holders. This one has 1,018. Make sure this is the token you mean.',
     )
+  })
+})
+
+describe('recentPills', () => {
+  const real = 'rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De'
+  const copy = 'rLUSDv9MRcCwPdBUZCGkG4u4EtdMMA1qYM'
+  const check = (id: number, issuer: string, net = 'mainnet', mode: 'check' | 'agent' = 'check') => ({ id, mode, net, req: { token: { currency: 'RLUSD', issuer } } })
+
+  it('keeps one pill per token and network, newest first', () => {
+    const pills = recentPills([check(4, real), check(3, copy), check(2, real), check(1, real, 'testnet'), check(0, real, 'testnet', 'agent')])
+    expect(pills.map(p => p.id)).toEqual([4, 3, 1])
+  })
+
+  it('tells copies apart by the end of the issuer address', () => {
+    expect(issuerTail(real)).toBe('…m5De')
+    expect(issuerTail(copy)).toBe('…1qYM')
   })
 })
 
