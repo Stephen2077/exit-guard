@@ -2,6 +2,7 @@
 // Server only (Vite dev server middleware). API keys come from the server's environment and never reach the page.
 // Read-only: nothing here sends a transaction.
 import Anthropic from '@anthropic-ai/sdk'
+import { isValidClassicAddress } from 'xrpl'
 import { maxSafeBuy } from '../engine/amm'
 import { DEFAULT_POLICY, evaluate, type Outcome, type Token } from '../engine/policy'
 import { answerLine, evidence } from '../exit/words'
@@ -62,7 +63,7 @@ intent: "buy" if they want to buy, "what_if" if they ask what happens if the age
 
 async function claudeExtract(env: Env, text: string): Promise<Extracted> {
   if (!env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is not set')
-  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1 })
   // Server-side fallback ("default") re-runs a declined request on Anthropic's recommended model.
   const params = {
     model: CLAUDE_MODEL,
@@ -74,19 +75,21 @@ async function claudeExtract(env: Env, text: string): Promise<Extracted> {
     messages: [{ role: 'user', content: text }],
   }
   const msg = (await client.beta.messages.create(params as unknown as Parameters<typeof client.beta.messages.create>[0], {
-    timeout: 30000,
+    timeout: 20000,
   })) as { stop_reason?: string; content: { type: string; text?: string }[] }
   if (msg.stop_reason === 'refusal') throw new Error('Claude declined to read this message')
   const out = msg.content.find(b => b.type === 'text')?.text
   if (!out) throw new Error('Claude returned no text')
   const e = JSON.parse(out) as Extracted
   // An issuer must be copied from the message, never invented.
-  if (e.issuer && !text.includes(e.issuer)) e.issuer = null
+  if (e.issuer && (!text.includes(e.issuer) || !isValidClassicAddress(e.issuer))) e.issuer = null
   if (e.amount_xrp !== null && !(e.amount_xrp > 0)) e.amount_xrp = null
   return e
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`
+// Names and domains are set by issuers: keep them short and plain before they go into a model's input.
+const clip = (s?: string) => (s ?? '').replace(/[^\w .:/-]/g, '').slice(0, 40)
 const toCandidate = (t: DirToken): Candidate => ({
   currency: t.currency,
   issuer: t.issuer,
@@ -106,6 +109,7 @@ async function issuedBy(issuer: string): Promise<Candidate[]> {
 
 export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   const body = (raw ?? {}) as { text?: unknown; amountXrp?: unknown; pick?: { currency?: unknown; issuer?: unknown } }
+  const picked = !!body.pick && typeof body.pick.currency === 'string' && typeof body.pick.issuer === 'string'
   const text = typeof body.text === 'string' ? body.text.trim().slice(0, 500) : ''
   if (!text) return { status: 400, body: { error: 'Send {"text": "..."}: a token name, an issuer address, or an instruction.' } }
 
@@ -118,20 +122,29 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   let name: string | null = null
   let issuer: string | null = null
   let code: string | null = null
-  let amount: number | undefined = typeof body.amountXrp === 'number' && body.amountXrp > 0 ? body.amountXrp : undefined
-  if (d.kind === 'token') ((code = d.code), (issuer = d.issuer), steps.push({ actor: 'parser', task: 'Reads the exact form', result: `token ${d.code} · ${short(d.issuer)}` }))
+  const given = Number(body.amountXrp)
+  let amount: number | undefined = body.amountXrp !== undefined && body.amountXrp !== null && given > 0 ? given : undefined
+  if (picked) {
+    // A person already chose the token: no need to read the words again.
+  } else if (d.kind === 'token') ((code = d.code), (issuer = d.issuer), steps.push({ actor: 'parser', task: 'Reads the exact form', result: `token ${d.code} · ${short(d.issuer)}` }))
   else if (d.kind === 'issuer') ((issuer = d.issuer), steps.push({ actor: 'parser', task: 'Reads the exact form', result: `issuer ${short(d.issuer)}` }))
   else if (d.kind === 'name') ((name = d.name), steps.push({ actor: 'parser', task: 'Reads the exact form', result: `token name "${d.name}"` }))
   else {
+    const textIssuer = d.kind === 'instruction' ? d.issuer : undefined
+    const textAmount = d.kind === 'instruction' ? d.amountXrp : undefined
     let ext: Extracted
     try {
       ext = await claudeExtract(env, text)
     } catch (e) {
-      return fail(502, `Claude could not read the message: ${(e as Error).message}`)
+      // Without Claude, an address in the text is still enough to go on.
+      if (!textIssuer) return fail(502, `Claude could not read the message: ${(e as Error).message}`)
+      ext = { intent: 'check', token_name: null, issuer: null, amount_xrp: null }
+      steps.push({ actor: 'parser', task: 'Reads the words', result: `issuer ${short(textIssuer)}`, note: `Claude unavailable (${(e as Error).message}): address read from the text` })
     }
     name = ext.token_name
-    issuer = ext.issuer
-    amount ??= ext.amount_xrp ?? (d.kind === 'instruction' ? d.amountXrp : undefined)
+    // What the text says exactly (an address, "50 XRP") wins over the model's reading.
+    issuer = textIssuer ?? ext.issuer
+    amount ??= textAmount ?? ext.amount_xrp ?? undefined
     steps.push({ actor: 'claude', task: 'Reads the words', result: `${ext.intent} · ${name ? `"${name}"` : 'no token'} · ${amount ?? DEFAULT_XRP} XRP` })
     // 2. Jev decides the intent from fixed options. If Jev is down, Claude's reading stands, and the page says so.
     try {
@@ -153,8 +166,8 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   let token: (Token & { name: string }) | undefined
   let candidates: Candidate[] = []
   try {
-    if (body.pick && typeof body.pick.currency === 'string' && typeof body.pick.issuer === 'string') {
-      const p = parseToken(body.pick.currency, body.pick.issuer)
+    if (picked) {
+      const p = parseToken(body.pick!.currency as string, body.pick!.issuer as string)
       if (!p.ok) return fail(400, p.error)
       token = { ...p.token, name: currencyName(p.token.currency) }
       steps.push({ actor: 'parser', task: 'Which token?', result: `you picked ${token.name} · ${short(token.issuer)}` })
@@ -183,7 +196,7 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   if (!token) {
     const options = candidates.slice(0, 8).map((c, i) => ({
       value: `c${i}`,
-      description: `${c.name} issued by ${c.issuerName ?? 'an unnamed issuer'} (${c.issuer})${c.domain ? `, claims ${c.domain}` : ''}, ${c.holders ?? 'unknown'} holders, directory trust ${c.trustLevel ?? 0} of 3`,
+      description: `${clip(c.name)} issued by ${clip(c.issuerName) || 'an unnamed issuer'} (${c.issuer}), ${c.holders ?? 'unknown'} holders, directory trust ${c.trustLevel ?? 0} of 3`,
     }))
     const task = `Which ${name ?? 'token'}? (${candidates.length} match)`
     try {
@@ -199,7 +212,18 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
       steps.push({ actor: 'parser', task, result: 'You pick', note: `Jev unavailable (${(e as Error).message})` })
     }
     if (!token) {
-      const result: AgentResult = { input: text, steps, net: NET, amountXrp, candidates: candidates.slice(0, 8), checks: [], maxSafeXrp: null }
+      // No token chosen yet: an agent must not read "no verdict" as "no DENY". A person picks, or call check_token.
+      const result: AgentResult = {
+        input: text,
+        steps,
+        net: NET,
+        amountXrp,
+        candidates: candidates.slice(0, 8),
+        checks: [],
+        maxSafeXrp: null,
+        action: { choice: 'human', by: 'rules' },
+        source: 'Several tokens match. Pick one, or call check_token with the exact currency and issuer. Do not buy before a verdict.',
+      }
       return { status: 200, body: result }
     }
   }
@@ -228,7 +252,8 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
     try {
       const j = await jevChoose(
         env,
-        `The user asked: "${text}". The agent plans to spend ${amountXrp} XRP on ${token.name}. Warnings: ${warnings} The largest buy that keeps exit cost under ${DEFAULT_POLICY.warnExitCost * 100}% is ${maxSafeXrp ?? 'unknown'} XRP.`,
+        // Only facts from the ledger and the rules: the caller's own words could argue for "go ahead".
+        `The agent plans to spend ${amountXrp} XRP on ${clip(token.name)}. Rule warnings: ${warnings} The largest buy that keeps exit cost under ${DEFAULT_POLICY.warnExitCost * 100}% is ${maxSafeXrp ?? 'unknown'} XRP.`,
         'Should the agent go ahead, ask a human, or give up?',
         [
           { value: 'continue', description: 'The warnings are minor for this buy; go ahead' },

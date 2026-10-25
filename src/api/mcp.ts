@@ -57,7 +57,8 @@ export async function mcpFromBody(raw: unknown, env: Env): Promise<Out> {
       const name = m.params?.name
       const args = (m.params?.arguments ?? {}) as Record<string, unknown>
       let reply: { status: number; body: unknown }
-      if (name === 'ask') reply = await agentFromBody({ text: args.text, amountXrp: args.amount_xrp }, env)
+      // A number sent as a string ("50") still counts; anything else falls back to the text or 2 XRP.
+      if (name === 'ask') reply = await agentFromBody({ text: args.text, amountXrp: args.amount_xrp === undefined ? undefined : Number(args.amount_xrp) }, env)
       else if (name === 'check_token') {
         const q = new URLSearchParams()
         for (const [k, v] of [['currency', args.currency], ['issuer', args.issuer], ['amount', args.amount_xrp], ['net', args.net]] as const)

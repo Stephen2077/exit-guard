@@ -42,12 +42,14 @@ export function Ask({ preview }: { preview: Preview | null }) {
   const [text, setText] = useState(sample?.input ?? (preview === 'checking' ? APPROVAL.input : ''))
   const [phase, setPhase] = useState<Phase>(sample ? { kind: 'done', r: sample } : preview === 'checking' ? { kind: 'checking' } : { kind: 'idle' })
   const asked = useRef(0) // only the latest request may update the page
+  const lastQ = useRef('') // what was asked, even if the box has been edited since
   const d = detect(text)
 
   async function ask(input: string, extra: { pick?: Candidate; amountXrp?: number } = {}) {
     const q = input.trim()
     if (!q || preview) return
     const id = ++asked.current
+    lastQ.current = q
     setText(q)
     setPhase({ kind: 'checking' })
     try {
@@ -71,7 +73,7 @@ export function Ask({ preview }: { preview: Preview | null }) {
       setText('')
       setPhase({ kind: 'idle' })
     },
-    onBuy: xrp => ask(text, { amountXrp: xrp }),
+    onBuy: xrp => ask(lastQ.current, { amountXrp: xrp }),
   }
   const idle = phase.kind === 'idle'
 
@@ -151,7 +153,7 @@ export function Ask({ preview }: { preview: Preview | null }) {
             {phase.steps.length > 0 && <Pipeline steps={phase.steps} />}
             <div className="err" role="alert">
               <p>{phase.message}</p>
-              <button className="ghost" onClick={() => ask(text)}>
+              <button className="ghost" onClick={() => ask(lastQ.current)}>
                 Try again
               </button>
             </div>
@@ -162,7 +164,7 @@ export function Ask({ preview }: { preview: Preview | null }) {
           <section className="result">
             <Pipeline steps={phase.r.steps} />
             {phase.r.candidates ? (
-              <Candidates list={phase.r.candidates} onPick={c => ask(text, { pick: c, amountXrp: phase.r.amountXrp })} />
+              <Candidates list={phase.r.candidates} onPick={c => ask(phase.r.input, { pick: c, amountXrp: phase.r.amountXrp })} />
             ) : (
               <Verdict key={phase.r.ledger?.time} r={phase.r} h={handlers} />
             )}
