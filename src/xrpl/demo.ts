@@ -15,7 +15,7 @@ const tfClearFreeze = 0x00200000
 
 export type Demo = { goodIssuer: Wallet; scamIssuer: Wallet; agent: Wallet; buyer: Wallet; GOOD: Token; SCAM: Token }
 
-const KEY = 'exit-guard-demo-v1'
+const KEY = 'exit-guard-demo-v2' // bump when setup changes, so old demo wallets are not reused
 
 export function loadDemo(): Demo | null {
   try {
@@ -85,15 +85,18 @@ export async function setupDemo(log: (msg: string) => void): Promise<Demo> {
   const demo = build({ goodIssuer: goodIssuer.seed!, scamIssuer: scamIssuer.seed!, agent: agent.seed!, buyer: buyer.seed! })
   const { GOOD, SCAM } = demo
 
-  log('GOD issuer: gives up freezing forever, opens a deep pool (50 XRP)...')
+  log('GOD issuer: gives up freezing forever. An outside wallet opens a deep pool (50 XRP)...')
   await mustSend('GOD issuer: DefaultRipple', goodIssuer, { TransactionType: 'AccountSet', SetFlag: asfDefaultRipple })
   await mustSend('GOD issuer: NoFreeze', goodIssuer, { TransactionType: 'AccountSet', SetFlag: asfNoFreeze })
-  await mustSend('GOD pool', goodIssuer, { TransactionType: 'AMMCreate', Amount: amt(GOOD, 50000), Amount2: '50000000', TradingFee: 500 })
+  await mustSend('Buyer trusts GOD', buyer, { TransactionType: 'TrustSet', LimitAmount: amt(GOOD, 1e9) })
+  await mustSend('GOD to pool owner', goodIssuer, { TransactionType: 'Payment', Destination: buyer.address, Amount: amt(GOOD, 50000) })
+  await mustSend('GOD pool', buyer, { TransactionType: 'AMMCreate', Amount: amt(GOOD, 50000), Amount2: '50000000', TradingFee: 500 })
 
   // Clawback must be switched on before any trust line exists (the pool creates one).
-  log('SCM issuer: turns on clawback, opens a shallow pool (5 XRP), gives a whale most of the supply...')
+  log('SCM issuer: turns on clawback, takes a 25% fee on every sale, owns its own shallow pool (5 XRP), gives a whale most of the supply...')
   await mustSend('SCM issuer: DefaultRipple', scamIssuer, { TransactionType: 'AccountSet', SetFlag: asfDefaultRipple })
   await mustSend('SCM issuer: Clawback on', scamIssuer, { TransactionType: 'AccountSet', SetFlag: asfAllowTrustLineClawback })
+  await mustSend('SCM issuer: 25% transfer fee', scamIssuer, { TransactionType: 'AccountSet', TransferRate: 1_250_000_000 })
   await mustSend('SCM pool', scamIssuer, { TransactionType: 'AMMCreate', Amount: amt(SCAM, 5000), Amount2: '5000000', TradingFee: 500 })
   await mustSend('Buyer trusts SCM', buyer, { TransactionType: 'TrustSet', LimitAmount: amt(SCAM, 1e9) })
   await mustSend('SCM whale', scamIssuer, { TransactionType: 'Payment', Destination: buyer.address, Amount: amt(SCAM, 50000) })

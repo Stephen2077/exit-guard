@@ -12,8 +12,13 @@ export async function getSnapshot(token: Token, agent: string | null): Promise<S
   const info = await c.request({ command: 'account_info', account: token.issuer, ledger_index: 'validated' })
   const flags = info.result.account_flags
 
+  // TransferRate is stored as 1e9 = no fee, 1.25e9 = 25% fee.
+  const rate = info.result.account_data.TransferRate
+  const transferFee = rate ? rate / 1e9 - 1 : 0
+
   let pool: Pool | null = null
   let ammAccount: string | null = null
+  let issuerLpShare: number | null = null
   try {
     const r = await c.request({
       command: 'amm_info',
@@ -27,8 +32,14 @@ export async function getSnapshot(token: Token, agent: string | null): Promise<S
     const tok = amounts.find((x): x is IssuedAmount => typeof x !== 'string')!
     pool = { token: Number(tok.value), xrp: Number(xrp) / 1e6, fee: (a.trading_fee ?? 0) / 100000 }
     ammAccount = a.account
-  } catch {
-    // no AMM pool for this pair
+
+    // LP tokens are issued by the AMM account; whoever holds them can withdraw that share of the pool.
+    const lp = await c.request({ command: 'account_lines', account: token.issuer, peer: a.account, ledger_index: 'validated' })
+    const held = Number(lp.result.lines.find(l => l.currency === a.lp_token.currency)?.balance ?? 0)
+    issuerLpShare = held / Number(a.lp_token.value)
+  } catch (e) {
+    // Only "no AMM pool for this pair" is expected; other errors must not look like "no pool to pull".
+    if ((e as { data?: { error?: string } }).data?.error !== 'actNotFound') throw e
   }
 
   // Holders are the issuer's trust lines with a negative balance (from the issuer's side).
@@ -60,6 +71,8 @@ export async function getSnapshot(token: Token, agent: string | null): Promise<S
     myLineFrozen,
     top1Share,
     pool,
+    issuerLpShare,
+    transferFee,
   }
 }
 

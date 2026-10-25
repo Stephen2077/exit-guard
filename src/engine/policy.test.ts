@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { exitCost } from './amm'
-import { evaluate, type Snapshot } from './policy'
+import { DEFAULT_POLICY, evaluate, type Snapshot } from './policy'
 
 const token = { currency: 'GOD', issuer: 'rGood' }
 const safe: Snapshot = {
@@ -11,6 +11,8 @@ const safe: Snapshot = {
   myLineFrozen: false,
   top1Share: null,
   pool: { token: 50000, xrp: 50, fee: 0.005 },
+  issuerLpShare: 0,
+  transferFee: 0,
 }
 
 describe('exitCost', () => {
@@ -32,7 +34,7 @@ describe('evaluate', () => {
   it('REQUIREs APPROVAL above the auto-limit', () => {
     const d = evaluate(safe, { token, amountXrp: 8 })
     expect(d.outcome).toBe('REQUIRE_APPROVAL')
-    expect(d.checks.find(c => c.id === 'R6')?.status).toBe('warn')
+    expect(d.checks.find(c => c.id === 'R8')?.status).toBe('warn')
   })
 
   it('REQUIREs APPROVAL when the issuer can still freeze', () => {
@@ -51,6 +53,18 @@ describe('evaluate', () => {
     expect(evaluate({ ...safe, pool: null }, { token, amountXrp: 1 }).outcome).toBe('DENY')
   })
 
+  it('REQUIREs APPROVAL when the issuer owns most of the pool', () => {
+    const d = evaluate({ ...safe, issuerLpShare: 1 }, { token, amountXrp: 1 })
+    expect(d.outcome).toBe('REQUIRE_APPROVAL')
+    expect(d.checks.find(c => c.id === 'R6')?.status).toBe('warn')
+  })
+
+  it('transfer fee: small passes, medium needs approval, large DENYs', () => {
+    expect(evaluate({ ...safe, transferFee: 0.005 }, { token, amountXrp: 1 }).outcome).toBe('ALLOW')
+    expect(evaluate({ ...safe, transferFee: 0.05 }, { token, amountXrp: 1 }).outcome).toBe('REQUIRE_APPROVAL')
+    expect(evaluate({ ...safe, transferFee: 0.25 }, { token, amountXrp: 1 }).outcome).toBe('DENY')
+  })
+
   it('DENYs when the exit cannot be priced (empty pool or bad amount)', () => {
     expect(evaluate({ ...safe, pool: { token: 0, xrp: 0, fee: 0.005 } }, { token, amountXrp: 1 }).outcome).toBe('DENY')
     expect(evaluate(safe, { token, amountXrp: NaN }).outcome).toBe('DENY')
@@ -63,7 +77,7 @@ describe('evaluate', () => {
   })
 
   it('trusted issuer turns clawback/freeze into pass, but a live freeze still DENYs', () => {
-    const p = { autoLimitXrp: 5, warnExitCost: 0.05, maxExitCost: 0.2, maxTop1Share: 0.5, trustedIssuers: ['rGood'] }
+    const p = { ...DEFAULT_POLICY, trustedIssuers: ['rGood'] }
     const s = { ...safe, noFreeze: false, clawback: true }
     expect(evaluate(s, { token, amountXrp: 1 }, p).outcome).toBe('ALLOW')
     expect(evaluate({ ...s, globalFreeze: true }, { token, amountXrp: 1 }, p).outcome).toBe('DENY')

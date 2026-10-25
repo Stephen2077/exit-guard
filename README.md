@@ -12,7 +12,7 @@ npm run dev
 
 Open http://localhost:5173, click **Create demo tokens** (about a minute on XRPL testnet), then use the buttons on the left.
 
-## The six rules (`src/engine/policy.ts`)
+## The eight rules (`src/engine/policy.ts`)
 
 | Rule | Checks | Result |
 |---|---|---|
@@ -21,7 +21,9 @@ Open http://localhost:5173, click **Create demo tokens** (about a minute on XRPL
 | R3 Can take tokens back | Issuer has clawback on | DENY |
 | R4 Holder concentration | One other wallet holds > 50% | needs approval |
 | R5 Exit cost | Selling the bought tokens into today's AMM pool loses > 5% / > 20% | approval / DENY |
-| R6 Amount | Above 5 XRP | needs approval |
+| R6 Can pull the pool | Issuer owns > 50% of the AMM pool (LP tokens) | needs approval |
+| R7 Transfer fee | Issuer takes > 1% / > 10% of every sale (TransferRate) | approval / DENY |
+| R8 Amount | Above 5 XRP | needs approval |
 
 Any DENY is final: approval cannot override it.
 

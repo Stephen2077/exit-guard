@@ -208,9 +208,9 @@ export default function App() {
               <div className="card-head">
                 <h1>Set up the demo</h1>
                 <p className="muted">
-                  Creates two tokens on the XRPL testnet. <b>GOD</b> is safe: the issuer gave up freezing and the pool is
-                  deep. <b>SCM</b> is a trap: the issuer can claw back, the pool is shallow, and one wallet holds most of
-                  the supply. Takes about a minute.
+                  Creates two tokens on the XRPL testnet. <b>GOD</b> is safe: the issuer gave up freezing, and an outside
+                  wallet owns a deep pool. <b>SCM</b> is a trap: the issuer can claw back, takes 25% of every sale, owns
+                  its own shallow pool, and one wallet holds most of the supply. Takes about a minute.
                 </p>
               </div>
               <button className="primary" onClick={startSetup} disabled={settingUp || online === false}>
@@ -236,7 +236,7 @@ export default function App() {
           ) : (
             <section className="card">
               <h1>Pick an agent request on the left</h1>
-              <p className="muted">Exit Guard reads the ledger, runs six fixed rules, and decides: allow, ask a human, or block.</p>
+              <p className="muted">Exit Guard reads the ledger, runs eight fixed rules, and decides: allow, ask a human, or block.</p>
             </section>
           )}
         </div>
