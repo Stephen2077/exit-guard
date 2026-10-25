@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Exit Guard · C Checkpoint</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<!--
+Direction C · Checkpoint (diagram as interface: Takram).
+The request travels left to right through five gates. The track stays black until the first gate that fails,
+then turns into a broken red line: the request is already stopped, the later gates still report what they found.
+While the ledger is read (2-8 s), each gate lights up as its data arrives.
+Data: real testnet records from 2026-10-25 01:47 ET.
+-->
+<style>
+  .app { height: 100vh; display: grid; grid-template-rows: 64px 60px auto minmax(0, 1fr); }
+
+  .bar { display: flex; align-items: center; gap: 20px; padding: 0 24px; }
+  .brand { display: flex; align-items: center; gap: 14px; font: 700 20px/1 var(--head); white-space: nowrap; }
+  .built { display: flex; align-items: center; gap: 6px; font: 500 12px/1 var(--sans); color: var(--muted); padding-left: 14px; box-shadow: inset 1px 0 0 var(--line-2); }
+  .built img { height: 16px; display: block; }
+  .check { flex: 1; max-width: 760px; margin-left: 8px; display: flex; gap: 6px; }
+  .check input { border: 0; outline: 0; background: var(--paper); border-radius: 8px; padding: 9px 12px; font-weight: 600; min-width: 0; box-shadow: inset 0 0 0 1px var(--line-2); }
+  .check .code { width: 84px; }
+  .check .issuer { flex: 1; font: 500 12.5px var(--mono); }
+  .check .amt { width: 90px; }
+  .seg { display: flex; background: var(--bg-2); border-radius: 8px; padding: 3px; }
+  .seg button { border: 0; background: none; padding: 5px 10px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .seg button.on { background: var(--paper); color: var(--ink); }
+  .go { border: 0; background: var(--ink); color: #fff; font-weight: 600; padding: 9px 18px; border-radius: 8px; }
+  .net { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-tint); }
+
+  /* Demo steps as a compact stepper */
+  .steps { display: flex; align-items: center; gap: 6px; padding: 0 24px; }
+  .steps span { display: flex; align-items: center; gap: 7px; padding: 7px 12px 7px 8px; border-radius: 99px; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .steps span i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font: 600 11px/1 var(--sans); font-style: normal; box-shadow: inset 0 0 0 1.5px var(--line-2); }
+  .steps .done { color: var(--ink); }
+  .steps .done i { background: var(--ink); color: #fff; box-shadow: none; }
+  .steps .here { background: var(--paper); color: var(--ink); font-weight: 600; }
+  .steps .next { background: var(--ink); color: #fff; font-weight: 600; padding-right: 14px; }
+  .steps .next i { box-shadow: inset 0 0 0 1.5px #fff; }
+  .steps em { flex: 1; }
+
+  /* The diagram */
+  .canvas { margin: 0 24px; background: var(--paper); border-radius: 16px; padding: 26px 28px 22px; }
+  .lane { position: relative; display: grid; grid-template-columns: 168px repeat(5, minmax(0, 1fr)) 176px; gap: 20px; }
+  .track { position: absolute; top: 31px; left: 84px; right: 88px; height: 6px; display: flex; }
+  .track .ok { width: 27%; background: var(--ink); border-radius: 3px 0 0 3px; }
+  .track .cut { flex: 1; background: repeating-linear-gradient(90deg, var(--red) 0 16px, transparent 16px 24px); }
+  .node, .gate { position: relative; z-index: 1; }
+  .agent .box { background: var(--ink); color: #fff; border-radius: 12px; padding: 12px 14px; }
+  .agent small, .outcome small { display: block; font-size: 12px; opacity: .75; }
+  .agent b { display: block; font: 700 16px/1.25 var(--head); margin-top: 2px; }
+  .agent .who { display: block; margin-top: 8px; font: 12px var(--mono); color: var(--muted); }
+  .gate .pin { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; margin: 17px 0 14px; font: 700 15px/1 var(--sans); background: var(--paper); box-shadow: 0 0 0 5px var(--paper), inset 0 0 0 2px var(--ink); }
+  .gate.pass .pin { color: var(--green-ink); box-shadow: 0 0 0 5px var(--paper), inset 0 0 0 2px var(--green-ink); }
+  .gate.warn .pin { background: var(--yellow); box-shadow: 0 0 0 5px var(--paper), inset 0 0 0 2px var(--ink); }
+  .gate.fail .pin { background: var(--red); color: #fff; box-shadow: 0 0 0 5px var(--paper); }
+  .gate.first .pin { width: 40px; height: 40px; margin: 14px 0 11px -3px; font-size: 17px; }
+  .gate h4 { font: 700 18px/1.15 var(--head); margin: 0 0 2px; letter-spacing: -0.01em; }
+  .gate .ask { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .cp { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 6px 0; font-size: 13.5px; line-height: 1.35; }
+  .cp b { display: block; font-weight: 600; }
+  .ev { display: block; margin-top: 2px; font: 11.5px/1.45 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+  .cp .meter { margin: 8px 0 18px; }
+  .outcome .box { margin-top: 0; background: var(--red); color: #fff; border-radius: 12px; padding: 12px 14px 14px; }
+  .outcome b { display: block; font: 800 46px/0.95 var(--head); letter-spacing: -0.04em; margin-top: 4px; }
+
+  /* Below: what it means + receipts */
+  .below { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 24px; padding: 22px 24px 24px; }
+  .explain h2 { font: 700 30px/1.15 var(--head); letter-spacing: -0.02em; margin: 0 0 10px; max-width: 30ch; }
+  .explain p { margin: 0 0 10px; font-size: 16px; max-width: 64ch; }
+  .explain .final { font-weight: 600; color: var(--red-ink); }
+  .receipts h3 { font: 600 13px/1 var(--sans); margin: 0 0 10px; }
+  .rc { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 0; box-shadow: inset 0 -1px 0 var(--line-2); font-size: 13.5px; }
+  .rc b { font-weight: 600; }
+  .rc .res { color: var(--green-ink); font-weight: 600; }
+  .rc .m { grid-column: 1 / -1; font: 12px var(--mono); color: var(--muted); }
+  .rc .m a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">Exit Guard <span class="built">built on <img src="/brand/xrpl-tertiary-black.svg" alt="XRPL" /></span></div>
+    <form class="check" onsubmit="return false">
+      <input class="code" value="SCM" aria-label="Token" />
+      <input class="issuer" value="rDGevRAqv5itU4BzbVxVZ2a4xAS5WtnUFF" aria-label="Issuer" />
+      <input class="amt" value="2 XRP" aria-label="Amount" />
+      <div class="seg"><button type="button" class="on">Testnet</button><button type="button">Mainnet</button></div>
+      <button class="go">Check</button>
+    </form>
+    <div class="net"><i class="dot"></i>Testnet · public node</div>
+  </header>
+
+  <nav class="steps" aria-label="Demo run">
+    <span class="done"><i>✓</i>Set up</span>
+    <span class="done"><i>✓</i>Safe buy</span>
+    <span class="done"><i>✓</i>Big buy</span>
+    <span class="done here"><i>✓</i>Scam token</span>
+    <span class="next"><i>5</i>Run: the trap, no guard</span>
+    <span><i>6</i>Reset</span>
+    <em></em>
+  </nav>
+
+  <section class="canvas">
+    <div class="lane">
+      <div class="track"><span class="ok"></span><span class="cut"></span></div>
+      <div class="node agent"><div class="box"><small>Agent wants to</small><b>Buy SCM with 2 XRP</b></div><span class="who">rhB2T8…BYX9</span></div>
+
+      <div class="gate warn"><span class="pin">!</span><h4>Lock</h4><p class="ask">Can they lock you in?</p>
+        <div class="cp"><span class="st pass">✓</span><span><b>Not frozen now</b><span class="ev">globalFreeze: false</span></span></div>
+        <div class="cp"><span class="st warn">!</span><span><b>Can freeze later</b><span class="ev">noFreeze: false</span></span></div>
+      </div>
+      <div class="gate fail first"><span class="pin">✕</span><h4>Take back</h4><p class="ask">Can they take it back?</p>
+        <div class="cp"><span class="st fail">✕</span><span><b>Clawback is on</b><span class="ev">allowTrustLineClawback: true</span></span></div>
+      </div>
+      <div class="gate fail"><span class="pin">✕</span><h4>Way out</h4><p class="ask">How much does selling cost?</p>
+        <div class="cp"><span class="st fail">✕</span><span><b>Exit cost 22.5%</b><span class="meter" aria-hidden="true"><i style="width:75%"></i><s style="left:16.7%" data-l="5%"></s><s style="left:66.7%" data-l="20%"></s></span><span class="ev">pool 5,000 SCM / 5 XRP</span></span></div>
+        <div class="cp"><span class="st warn">!</span><span><b>Issuer owns pool</b><span class="ev">100% of LP tokens</span></span></div>
+        <div class="cp"><span class="st warn">!</span><span><b>One wallet 100%</b><span class="ev">rDaeDP…fjBW</span></span></div>
+      </div>
+      <div class="gate fail"><span class="pin">✕</span><h4>Toll</h4><p class="ask">Fee on every sale?</p>
+        <div class="cp"><span class="st fail">✕</span><span><b>25% transfer fee</b><span class="ev">TransferRate: 1250000000</span></span></div>
+      </div>
+      <div class="gate pass"><span class="pin">✓</span><h4>Size</h4><p class="ask">Is it a small buy?</p>
+        <div class="cp"><span class="st pass">✓</span><span><b>Under 5 XRP</b><span class="ev">autoLimitXrp: 5</span></span></div>
+      </div>
+
+      <div class="node outcome"><div class="box"><small>Verdict</small><b>Deny</b></div></div>
+    </div>
+  </section>
+
+  <section class="below">
+    <div class="explain">
+      <h2>Stopped at Take back. Way out and Toll failed too.</h2>
+      <p>The issuer can pull SCM out of the agent's wallet, keeps 25% of every sale, and this 5 XRP pool would pay 22.5% below market for what the agent buys.</p>
+      <p class="final">Deny is final. There is no approve button. Nothing was sent to the ledger.</p>
+    </div>
+    <div class="receipts">
+      <h3>Ledger receipts</h3>
+      <div class="rc"><b>Agent buys GOD with 8 XRP</b><span class="res">Done</span><span class="m">OfferCreate · ledger 21805925 · <a href="#">4444B2B7…F613B600</a></span></div>
+      <div class="rc"><b>Agent buys GOD with 2 XRP</b><span class="res">Done</span><span class="m">OfferCreate · ledger 21805866 · <a href="#">8D895DEF…F6E810B3</a></span></div>
+      <div class="rc"><b>Agent trusts GOD</b><span class="res">Done</span><span class="m">TrustSet · ledger 21805864 · <a href="#">30071C74…2DB27D0A</a></span></div>
+    </div>
+  </section>
+</div>
+<div class="mock-label">C · Checkpoint · static mockup · real testnet data</div>
+</body>
+</html>

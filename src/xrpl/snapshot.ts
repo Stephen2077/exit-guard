@@ -1,13 +1,13 @@
 // Read everything the policy engine needs from the ledger. Read-only.
 import type { Pool } from '../engine/amm'
 import type { Snapshot, Token } from '../engine/policy'
-import { getClient } from './client'
+import { getClient, type Net } from './client'
 
 type IssuedAmount = { currency: string; issuer: string; value: string }
 type AmmAmount = string | IssuedAmount
 
-export async function getSnapshot(token: Token, agent: string | null): Promise<Snapshot> {
-  const c = await getClient()
+export async function getSnapshot(token: Token, agent: string | null, net: Net = 'testnet'): Promise<Snapshot> {
+  const c = await getClient(net)
 
   const info = await c.request({ command: 'account_info', account: token.issuer, ledger_index: 'validated' })
   const flags = info.result.account_flags

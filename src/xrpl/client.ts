@@ -1,16 +1,22 @@
 import { Client, type SubmittableTransaction, type Wallet } from 'xrpl'
 
+export type Net = 'testnet' | 'mainnet'
+
 // Set VITE_XRPL_WS in .env to use a QuickNode testnet endpoint.
 export const NETWORK: string = import.meta.env.VITE_XRPL_WS ?? 'wss://s.altnet.rippletest.net:51233'
+// Mainnet is read-only here: we check tokens there, we never send transactions.
+export const MAINNET = 'wss://xrplcluster.com'
 export const EXPLORER = 'https://testnet.xrpl.org/transactions/'
+export const EXPLORER_HOST: Record<Net, string> = { testnet: 'https://testnet.xrpl.org', mainnet: 'https://livenet.xrpl.org' }
 
-const client = new Client(NETWORK)
-let connecting: Promise<void> | null = null
+const clients: Record<Net, Client> = { testnet: new Client(NETWORK), mainnet: new Client(MAINNET) }
+const connecting: Partial<Record<Net, Promise<void>>> = {}
 
-export async function getClient(): Promise<Client> {
+export async function getClient(net: Net = 'testnet'): Promise<Client> {
+  const client = clients[net]
   if (!client.isConnected()) {
-    connecting ??= client.connect().finally(() => (connecting = null))
-    await connecting
+    connecting[net] ??= client.connect().finally(() => delete connecting[net])
+    await connecting[net]
   }
   return client
 }

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Exit Guard · B Exit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<!--
+Direction B · Exit (concept minimalism: Experimental Jetset — one metaphor, type as the graphic).
+The whole product is one question: is there a way out? The verdict is an exit sign: Exit open / Exit narrow / No exit.
+The demo script is a route line (wayfinding), the eight rules become five plain questions.
+Text on the red panel is 19px+ semibold or larger: brand red with white text is 4.3:1, fine only for large text.
+Data: real testnet records from 2026-10-25 01:47 ET.
+-->
+<style>
+  .app { height: 100vh; display: grid; grid-template-rows: 60px 96px minmax(0, 1fr); }
+
+  .bar { display: flex; align-items: center; gap: 16px; padding: 0 28px; }
+  .brand { display: flex; align-items: center; gap: 14px; font: 700 20px/1 var(--head); }
+  .built { display: flex; align-items: center; gap: 6px; font: 500 12px/1 var(--sans); color: var(--muted); padding-left: 14px; box-shadow: inset 1px 0 0 var(--line-2); }
+  .built img { height: 16px; display: block; }
+  .net { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-tint); }
+  .reset { border: 0; background: none; font-size: 13px; color: var(--muted); text-decoration: underline; padding: 0 0 0 10px; }
+
+  /* Route line: the demo script as stations. */
+  .route { position: relative; display: grid; grid-template-columns: repeat(6, 1fr); padding: 0 28px; }
+  .line { position: absolute; top: 24px; left: calc(28px + (100% - 56px) / 12); right: calc(28px + (100% - 56px) / 12); height: 4px; background: var(--line-2); border-radius: 2px; }
+  .line i { position: absolute; inset: 0 auto 0 0; width: 60%; background: var(--ink); border-radius: 2px; }
+  .stop { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .stop > i { width: 24px; height: 24px; margin-top: 14px; border-radius: 50%; background: var(--bg); box-shadow: inset 0 0 0 4px var(--line-2); }
+  .stop.done > i { background: var(--ink); box-shadow: none; }
+  .stop.here > i { width: 32px; height: 32px; margin: 10px 0 -4px; background: var(--red); box-shadow: 0 0 0 4px var(--bg), 0 0 0 6px var(--ink); }
+  .stop.next > i { background: var(--paper); box-shadow: inset 0 0 0 4px var(--ink); }
+  .stop b { margin-top: 6px; min-height: 26px; display: flex; align-items: center; gap: 8px; font: 600 14px/1.2 var(--sans); }
+  .stop small { font-size: 12px; color: var(--muted); }
+  .stop.next b { display: flex; align-items: center; gap: 8px; }
+  .stop.next button { border: 0; background: var(--ink); color: #fff; font: 600 12px/1 var(--sans); padding: 6px 10px; border-radius: 6px; }
+
+  .split { min-height: 0; display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+
+  /* The sign */
+  .sign { background: var(--red); color: #fff; padding: 28px 48px 36px; display: flex; flex-direction: column; border-radius: 0 18px 0 0; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { background: #fff; color: var(--ink); font: 600 13px/1 var(--sans); padding: 8px 10px; border-radius: 6px; }
+  .chip.mono { font: 500 12.5px/1 var(--mono); }
+  .sign h1 { font: 800 176px/0.84 var(--head); letter-spacing: -0.055em; margin: 52px 0 22px -8px; }
+  .sub { font: 600 28px/1.25 var(--sans); margin: 0 0 34px; max-width: 24ch; letter-spacing: -0.01em; }
+  .why { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; font: 600 22px/1.3 var(--sans); }
+  .why li { display: flex; gap: 14px; align-items: center; }
+  .why .x { flex: none; width: 32px; height: 32px; border-radius: 7px; background: #fff; color: var(--red); display: grid; place-items: center; font: 800 17px/1 var(--sans); }
+  .sign-foot { margin-top: auto; font: 600 19px/1.3 var(--sans); }
+
+  /* Right side: check any token + five questions */
+  .side { background: var(--paper); overflow: auto; padding: 26px 32px 40px; }
+  .side h2 { font: 700 13px/1 var(--sans); margin: 0 0 12px; }
+  .check { display: grid; grid-template-columns: 96px minmax(0, 1fr) 96px; gap: 8px; margin-bottom: 10px; }
+  .fld { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .fld span { font-size: 12px; color: var(--muted); }
+  .fld input { border: 0; outline: 0; background: var(--bg); border-radius: 8px; padding: 10px 12px; font-weight: 600; min-width: 0; }
+  .fld.issuer input { font: 500 12.5px var(--mono); padding: 11px 12px; }
+  .check-row { display: flex; gap: 8px; align-items: center; margin-bottom: 26px; }
+  .seg { display: flex; background: var(--bg); border-radius: 8px; padding: 3px; }
+  .seg button { border: 0; background: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .seg button.on { background: var(--paper); color: var(--ink); box-shadow: 0 0 0 1px var(--line-2); }
+  .try { font-size: 13px; color: var(--muted); }
+  .try u { color: var(--ink); text-underline-offset: 3px; margin-left: 4px; }
+  .go { margin-left: auto; border: 0; background: var(--ink); color: #fff; font-weight: 600; padding: 10px 20px; border-radius: 8px; }
+
+  .qs { display: flex; flex-direction: column; gap: 4px; }
+  .q { padding: 14px 0 12px; box-shadow: inset 0 1px 0 var(--line); }
+  .q h3 { display: flex; justify-content: space-between; align-items: center; font: 700 19px/1.25 var(--head); letter-spacing: -0.01em; margin: 0 0 8px; }
+  .a { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 4px 0; align-items: start; }
+  .a p { margin: 0; }
+  .a .ev { display: block; font: 12px/1.5 var(--mono); color: var(--muted); }
+  .a .meter { margin: 8px 0 18px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">Exit Guard <span class="built">built on <img src="/brand/xrpl-tertiary-black.svg" alt="XRPL" /></span></div>
+    <div class="net"><i class="dot"></i>Testnet · public node<button class="reset">New demo wallets</button></div>
+  </header>
+
+  <nav class="route" aria-label="Demo run">
+    <div class="line"><i></i></div>
+    <div class="stop done"><i></i><b>Set up</b><small>GOD and SCM</small></div>
+    <div class="stop done"><i></i><b>Safe buy</b><small>GOD, 2 XRP</small></div>
+    <div class="stop done"><i></i><b>Big buy</b><small>GOD, 8 XRP</small></div>
+    <div class="stop here"><i></i><b>Scam token</b><small>SCM, 2 XRP</small></div>
+    <div class="stop next"><i></i><b>The trap <button>Run</button></b><small>no guard</small></div>
+    <div class="stop"><i></i><b>Reset</b><small>unfreeze</small></div>
+  </nav>
+
+  <div class="split">
+    <section class="sign">
+      <div class="chips"><span class="chip">Agent buys SCM with 2 XRP</span><span class="chip mono">rDGevR…nUFF</span><span class="chip">Testnet · 01:47:44</span></div>
+      <h1>No exit.</h1>
+      <p class="sub">The agent could buy in. It could not get back out.</p>
+      <ul class="why">
+        <li><span class="x">✕</span>The issuer can take tokens back.</li>
+        <li><span class="x">✕</span>The issuer keeps 25% of every sale.</li>
+        <li><span class="x">✕</span>Selling 2 XRP worth loses 22.5%.</li>
+      </ul>
+      <p class="sign-foot">Denied. Final. Nothing was sent to the ledger.</p>
+    </section>
+
+    <aside class="side">
+      <h2>Check any token</h2>
+      <form class="check" onsubmit="return false">
+        <label class="fld"><span>Token</span><input value="SCM" /></label>
+        <label class="fld issuer"><span>Issuer</span><input value="rDGevRAqv5itU4BzbVxVZ2a4xAS5WtnUFF" /></label>
+        <label class="fld"><span>Buy (XRP)</span><input value="2" /></label>
+      </form>
+      <div class="check-row">
+        <div class="seg"><button type="button" class="on">Testnet</button><button type="button">Mainnet</button></div>
+        <span class="try">Try <u>GOD</u> <u>SCM</u></span>
+        <button class="go">Check</button>
+      </div>
+
+      <h2>Five questions</h2>
+      <div class="qs">
+        <div class="q"><h3>Can they lock you in?</h3>
+          <div class="a"><span class="st pass">✓</span><p>Not frozen right now.<span class="ev">globalFreeze: false · agent line not frozen</span></p></div>
+          <div class="a"><span class="st warn">!</span><p>The issuer kept the power to freeze.<span class="ev">noFreeze: false</span></p></div>
+        </div>
+        <div class="q"><h3>Can they take it back?</h3>
+          <div class="a"><span class="st fail">✕</span><p>Yes. Clawback is on.<span class="ev">allowTrustLineClawback: true</span></p></div>
+        </div>
+        <div class="q"><h3>How wide is the way out?</h3>
+          <div class="a"><span class="st fail">✕</span><p>Selling loses 22.5% in a 5 XRP pool.
+            <span class="meter" aria-hidden="true"><i style="width:75%"></i><s style="left:16.7%" data-l="ask 5%"></s><s style="left:66.7%" data-l="block 20%"></s></span></p></div>
+          <div class="a"><span class="st warn">!</span><p>The issuer owns 100% of the pool.<span class="ev">can withdraw it at any time</span></p></div>
+          <div class="a"><span class="st warn">!</span><p>One wallet holds 100% of the supply.<span class="ev">rDaeDP…fjBW holds 50,000 SCM</span></p></div>
+        </div>
+        <div class="q"><h3>Is there a toll?</h3>
+          <div class="a"><span class="st fail">✕</span><p>25% of every sale goes to the issuer.<span class="ev">TransferRate: 1250000000</span></p></div>
+        </div>
+        <div class="q"><h3>Is it a small buy?</h3>
+          <div class="a"><span class="st pass">✓</span><p>2 XRP, under the 5 XRP auto-limit.</p></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+<div class="mock-label">B · Exit · static mockup · real testnet data</div>
+</body>
+</html>

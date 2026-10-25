@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Exit Guard · A Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<!--
+Direction A · Report (information architecture: Fathom / Pentagram).
+Assumptions: used by our team on a laptop; the verdict is the one focal point; every finding cites the ledger data it came from.
+Data: real testnet records from 2026-10-25 01:47 ET (SCM issuer rDGevRAqv5itU4BzbVxVZ2a4xAS5WtnUFF).
+-->
+<style>
+  .app { height: 100vh; display: grid; grid-template-rows: 68px minmax(0, 1fr); }
+
+  .bar { display: flex; align-items: center; gap: 20px; padding: 0 24px; }
+  .brand { display: flex; align-items: center; gap: 14px; font: 700 20px/1 var(--head); white-space: nowrap; }
+  .built { display: flex; align-items: center; gap: 6px; font: 500 12px/1 var(--sans); color: var(--muted); padding-left: 14px; box-shadow: inset 1px 0 0 var(--line-2); }
+  .built img { height: 16px; display: block; }
+
+  .check { flex: 1; display: flex; align-items: center; gap: 2px; background: var(--paper); border-radius: 10px; padding: 5px; box-shadow: inset 0 0 0 1px var(--line-2); max-width: 900px; margin-left: 12px; }
+  .f { display: flex; align-items: baseline; gap: 8px; padding: 7px 12px; border-radius: 7px; min-width: 0; }
+  .f + .f { box-shadow: inset 1px 0 0 var(--line); }
+  .f span { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .f input { border: 0; outline: 0; background: none; padding: 0; font-weight: 600; width: 100%; min-width: 0; }
+  .f-code { width: 116px; }
+  .f-issuer { flex: 1; }
+  .f-issuer input { font: 500 13px var(--mono); }
+  .f-amt { width: 124px; }
+  .f-amt input { width: 3ch; }
+  .f-amt em { font-style: normal; color: var(--muted); font-size: 13px; }
+  .seg { display: flex; background: var(--bg); border-radius: 7px; padding: 3px; margin: 0 4px; }
+  .seg button { border: 0; background: none; padding: 5px 10px; border-radius: 5px; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .seg button.on { background: var(--paper); color: var(--ink); box-shadow: 0 0 0 1px var(--line-2); }
+  .go { border: 0; background: var(--ink); color: #fff; font-weight: 600; padding: 9px 20px; border-radius: 7px; }
+  .net { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 3px var(--green-tint); }
+
+  .grid { min-height: 0; display: grid; grid-template-columns: 276px minmax(0, 1fr) 340px; }
+  .rail, .side { overflow: auto; padding: 20px 24px 32px; }
+  .page { background: var(--paper); overflow: auto; padding: 36px 56px 48px; border-radius: 16px 16px 0 0; }
+  h2 { font: 600 13px/1 var(--sans); margin: 0 0 16px; }
+
+  /* Runbook: the demo script, with the next step as the one obvious button. */
+  .run { list-style: none; margin: 0 0 36px; padding: 0; counter-reset: s; }
+  .run li { counter-increment: s; position: relative; padding: 0 0 20px 36px; }
+  .run li::before { content: counter(s); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 600 12px/1 var(--sans); background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--line-2); color: var(--muted); z-index: 1; }
+  .run li::after { content: ''; position: absolute; left: 11px; top: 24px; bottom: 0; width: 2px; background: var(--line-2); }
+  .run li:last-child::after { display: none; }
+  .run li.done::before { content: '✓'; background: var(--ink); color: #fff; box-shadow: none; }
+  .run li.done::after { background: var(--ink); }
+  .run li.next::before { background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 2px var(--ink); }
+  .run b { display: block; font-weight: 600; font-size: 14px; line-height: 1.35; }
+  .run small { display: block; font-size: 12.5px; line-height: 1.4; color: var(--muted); margin-top: 2px; }
+  .run li.here b { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .run li.next button { margin-top: 10px; width: 100%; border: 0; background: var(--ink); color: #fff; padding: 11px 14px; border-radius: 8px; font-weight: 600; text-align: left; display: flex; justify-content: space-between; }
+  .run li.next button kbd { font: 500 11px/1 var(--mono); opacity: .7; align-self: center; }
+
+  .hist { list-style: none; margin: 0; padding: 0; }
+  .hist li { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; align-items: center; padding: 9px 10px; border-radius: 8px; font-size: 13.5px; white-space: nowrap; }
+  .hist li.sel { background: var(--paper); font-weight: 600; }
+  .hist time { font: 12px var(--mono); color: var(--muted); font-weight: 400; }
+
+  /* The report */
+  .meta { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .meta .mono { font-size: 12.5px; }
+  .verdict { font: 800 132px/0.84 var(--head); letter-spacing: -0.05em; margin: 0 0 22px -6px; color: var(--red); }
+  .lede { font: 400 21px/1.45 var(--sans); max-width: 42ch; margin: 0 0 34px; }
+  .lede strong { font-weight: 600; }
+
+  .group { margin-bottom: 26px; }
+  .group h3 { display: flex; align-items: baseline; gap: 10px; font: 600 15px/1 var(--sans); margin: 0 0 4px; }
+  .group h3 em { font: 500 13px/1 var(--sans); font-style: normal; color: var(--muted); }
+  .row { display: grid; grid-template-columns: 34px 220px minmax(0, 1fr); gap: 12px; padding: 13px 0; box-shadow: inset 0 -1px 0 var(--line); }
+  .row .st { margin-top: 1px; }
+  .q { font-weight: 600; }
+  .ev { display: block; margin-top: 3px; font: 12.5px/1.45 var(--mono); color: var(--muted); }
+  .fine .row { padding: 9px 0; }
+  .fine .q, .fine .find { color: var(--ink-2); font-weight: 500; }
+  .final { margin: 26px 0 0; font-weight: 600; color: var(--red-ink); }
+
+  /* Receipts: printed slips with a torn bottom edge. */
+  .note { background: var(--paper); border-radius: 8px; padding: 12px 14px; font-size: 13.5px; margin: 0 0 18px; }
+  .note b { color: var(--red-ink); }
+  .rcpt { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .rcpt li { background: var(--paper); padding: 13px 14px 20px; border-radius: 6px 6px 0 0; -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 10px 100%; mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 10px 100%; }
+  .rcpt b { display: block; font-weight: 600; font-size: 14px; }
+  .res { font-size: 13.5px; font-weight: 600; color: var(--green-ink); }
+  .rcpt .m { display: block; font: 12px/1.6 var(--mono); color: var(--muted); margin-top: 6px; }
+  .rcpt a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">Exit Guard <span class="built">built on <img src="/brand/xrpl-tertiary-black.svg" alt="XRPL" /></span></div>
+    <form class="check" onsubmit="return false">
+      <label class="f f-code"><span>Token</span><input value="SCM" /></label>
+      <label class="f f-issuer"><span>Issuer</span><input value="rDGevRAqv5itU4BzbVxVZ2a4xAS5WtnUFF" /></label>
+      <label class="f f-amt"><span>Buy</span><input value="2" /><em>XRP</em></label>
+      <div class="seg"><button type="button" class="on">Testnet</button><button type="button">Mainnet</button></div>
+      <button class="go">Check</button>
+    </form>
+    <div class="net"><i class="dot"></i>Testnet · public node</div>
+  </header>
+
+  <div class="grid">
+    <aside class="rail">
+      <h2>Demo run</h2>
+      <ol class="run">
+        <li class="done"><b>Create demo tokens</b><small>4 testnet wallets, GOD and SCM</small></li>
+        <li class="done"><b>Agent buys GOD with 2 XRP</b><small>Allowed, bought</small></li>
+        <li class="done"><b>Agent buys GOD with 8 XRP</b><small>Asked a human, approved, bought</small></li>
+        <li class="done here"><b>Agent buys SCM with 2 XRP</b><small>Denied, nothing sent</small></li>
+        <li class="next"><b>What if there were no guard?</b><small>The agent buys SCM anyway. Then the issuer freezes only the agent.</small><button>Run this step <kbd>↵</kbd></button></li>
+        <li><b>Unfreeze and reset</b></li>
+      </ol>
+      <h2>Checked</h2>
+      <ul class="hist">
+        <li><time>01:50:13</time>GOD · 8 XRP<span class="tag ask">ASK</span></li>
+        <li class="sel"><time>01:47:44</time>SCM · 2 XRP<span class="tag deny">DENY</span></li>
+        <li><time>01:47:05</time>GOD · 2 XRP<span class="tag allow">ALLOW</span></li>
+      </ul>
+    </aside>
+
+    <main class="page">
+      <p class="meta">Agent request at 01:47:44 · issuer <span class="mono">rDGevR…nUFF</span></p>
+      <h1 class="verdict">Deny</h1>
+      <p class="lede">Buy SCM with 2 XRP. <strong>Buying is easy. Getting out is not.</strong> The issuer can take tokens back, keeps 25% of every sale, and this pool would pay 22.5% below market.</p>
+
+      <section class="group">
+        <h3>Why it is denied <em>3 checks failed</em></h3>
+        <div class="row"><span class="st fail">✕</span><span class="q">Can they take it back?</span><span class="find">Issuer can pull tokens out of your wallet.<span class="ev">allowTrustLineClawback: true</span></span></div>
+        <div class="row"><span class="st fail">✕</span><span class="q">What would selling cost?</span><span class="find">Selling this many tokens into the pool gets 22.5% below market price (pool: 5.0 XRP).
+          <span class="meter" aria-hidden="true"><i style="width:75%"></i><s style="left:16.7%" data-l="ask 5%"></s><s style="left:66.7%" data-l="block 20%"></s></span>
+          <span class="ev">AMM pool 5,000 SCM / 5 XRP · trading fee 0.5%</span></span></div>
+        <div class="row"><span class="st fail">✕</span><span class="q">Is there a fee on every sale?</span><span class="find">Issuer takes 25.0% of every sale.<span class="ev">TransferRate: 1250000000</span></span></div>
+      </section>
+
+      <section class="group">
+        <h3>Also risky <em>3 warnings</em></h3>
+        <div class="row"><span class="st warn">!</span><span class="q">Can they freeze it later?</span><span class="find">Issuer can freeze your tokens at any time.<span class="ev">noFreeze: false</span></span></div>
+        <div class="row"><span class="st warn">!</span><span class="q">Does one wallet hold most?</span><span class="find">One wallet holds 100.0% of supply.<span class="ev">rDaeDP…fjBW holds 50,000 SCM</span></span></div>
+        <div class="row"><span class="st warn">!</span><span class="q">Can the issuer pull the pool?</span><span class="find">Issuer owns 100.0% of the pool and can withdraw it at any time.<span class="ev">issuer holds 100% of the LP tokens</span></span></div>
+      </section>
+
+      <section class="group fine">
+        <h3>Fine <em>2 passed</em></h3>
+        <div class="row"><span class="st pass">✓</span><span class="q">Frozen right now?</span><span class="find">Not frozen.</span></div>
+        <div class="row"><span class="st pass">✓</span><span class="q">Is the amount small?</span><span class="find">2 XRP is within the 5 XRP auto-limit.</span></div>
+      </section>
+
+      <p class="final">Deny is final. There is no approve button. Nothing was sent to the ledger for this request.</p>
+    </main>
+
+    <aside class="side">
+      <h2>Ledger receipts</h2>
+      <p class="note"><b>This request:</b> nothing sent.</p>
+      <ol class="rcpt">
+        <li><b>Agent buys GOD with 8 XRP</b><span class="res">Done</span><span class="m">OfferCreate · ledger 21805925<br /><a href="#">4444B2B7…F613B600</a></span></li>
+        <li><b>Agent buys GOD with 2 XRP</b><span class="res">Done</span><span class="m">OfferCreate · ledger 21805866<br /><a href="#">8D895DEF…F6E810B3</a></span></li>
+        <li><b>Agent trusts GOD</b><span class="res">Done</span><span class="m">TrustSet · ledger 21805864<br /><a href="#">30071C74…2DB27D0A</a></span></li>
+      </ol>
+    </aside>
+  </div>
+</div>
+<div class="mock-label">A · Report · static mockup · real testnet data</div>
+</body>
+</html>
