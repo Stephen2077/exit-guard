@@ -30,8 +30,9 @@ export function Evidence({ txs }: { txs: TxRecord[] }) {
         <p className="muted">Every transaction the agent or issuer sends shows up here, with a link to the testnet explorer.</p>
       ) : (
         <ul className="tx-list">
+          {/* Keys count from the oldest receipt, so only a new receipt mounts (and feeds in). */}
           {txs.map((t, i) => (
-            <TxRow key={(t.hash ?? t.label) + i} tx={t} />
+            <TxRow key={t.hash ?? `${t.label}-${txs.length - i}`} tx={t} />
           ))}
         </ul>
       )}

@@ -23,7 +23,7 @@ function ExitMeter({ cost, status }: { cost: number; status: Check['status'] }) 
 
 const VERDICT: Record<Outcome, { icon: string; title: string; sub: string }> = {
   ALLOW: { icon: '✓', title: 'ALLOW', sub: 'Safe and small. The agent buys automatically.' },
-  REQUIRE_APPROVAL: { icon: '⏸', title: 'NEEDS APPROVAL', sub: 'Some risk or a large amount. A human must say yes.' },
+  REQUIRE_APPROVAL: { icon: '!', title: 'NEEDS APPROVAL', sub: 'Some risk or a large amount. A human must say yes.' },
   DENY: { icon: '✕', title: 'DENY', sub: 'Blocked. This is final and cannot be approved.' },
 }
 
@@ -61,15 +61,17 @@ export function RiskCard({ entry, busy, onApprove, onReject }: Props) {
       {decision && (
         <table className="checks">
           <tbody>
-            {decision.checks.map(c => (
-              <tr key={c.id} className={c.status}>
+            {decision.checks.map((c, i) => (
+              <tr key={c.id} className={c.status} style={{ '--i': i } as React.CSSProperties}>
                 <td className="rule">{c.id}</td>
                 <td className="check-label">{c.label}</td>
                 <td className="check-detail">
                   {c.detail}
                   {c.id === 'R5' && cost !== null && Number.isFinite(cost) && <ExitMeter cost={cost} status={c.status} />}
                 </td>
-                <td className="check-status">{STATUS_ICON[c.status]}</td>
+                <td className="check-status">
+                  <span>{STATUS_ICON[c.status]}</span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -91,7 +93,11 @@ export function RiskCard({ entry, busy, onApprove, onReject }: Props) {
           </div>
         )}
         {status === 'executing' && <p className="muted">Sending to the ledger…</p>}
-        {status === 'blocked' && <p className="final">DENY is final. There is no approve button. {entry.note}</p>}
+        {status === 'blocked' && (
+          <p className="final">
+            DENY is final. There is no approve button. Nothing was sent to the ledger for this request. {entry.note}
+          </p>
+        )}
         {status === 'rejected' && <p className="muted">You rejected this request. Nothing was sent.</p>}
         {status === 'bought' && <p className="ok-text">Bought. Proof is on the ledger:</p>}
         {status === 'failed' && <p className="final">The buy did not go through. {entry.note}</p>}

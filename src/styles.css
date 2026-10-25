@@ -16,12 +16,19 @@
   --font: 'Inter', system-ui, sans-serif;
   --font-head: 'Inter Tight', 'Inter', system-ui, sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* Motion: ease-out only, UI moves stay under ~400ms (see DESIGN.md). */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --step: 45ms;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--gray-100); color: var(--black); font-family: var(--font); font-size: 15px; }
-button { font: inherit; cursor: pointer; border: 1px solid var(--gray-300); background: var(--white); color: var(--black); padding: 10px 14px; border-radius: 6px; text-align: left; }
-button:hover:not(:disabled) { border-color: var(--black); }
+button { font: inherit; cursor: pointer; border: 1px solid var(--gray-300); background: var(--white); color: var(--black); padding: 10px 14px; border-radius: 6px; text-align: left; transition: transform 120ms var(--ease-out); }
+@media (hover: hover) {
+  button:hover:not(:disabled) { border-color: var(--black); }
+  .feed li:hover { background: var(--gray-200); }
+}
+button:active:not(:disabled) { transform: scale(0.97); }
 button:disabled { opacity: 0.45; cursor: default; }
 button:focus-visible { outline: 2px solid var(--black); outline-offset: 2px; }
 button.primary { background: var(--green-300); color: var(--black); border-color: var(--green-300); font-weight: 600; }
@@ -63,7 +70,6 @@ h2 { font-size: 13px; font-weight: 600; color: var(--gray-500); margin: 0 0 12px
 .presets { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
 .feed { list-style: none; margin: 0; padding: 0; }
 .feed li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 10px 10px 12px; border-left: 4px solid transparent; cursor: pointer; font-size: 14px; }
-.feed li:hover { background: var(--gray-200); }
 .feed li.sel { border-left-color: var(--green-300); background: var(--white); }
 .time { color: var(--gray-500); font-family: var(--mono); font-size: 12px; }
 .chip { font-size: 11px; font-weight: 600; padding: 3px 7px; border-radius: 4px; background: var(--gray-200); }
@@ -78,6 +84,16 @@ h2 { font-size: 13px; font-weight: 600; color: var(--gray-500); margin: 0 0 12px
 .mono-sm { font-family: var(--mono); font-size: 12px; }
 
 .verdict { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 6px; }
+/* The eight checks land one by one (45ms apart), then the verdict lands once the last row is in. DENY shakes once. */
+.checks tr { animation: rise 180ms var(--ease-out) calc(var(--i) * var(--step)) both; }
+.verdict:not(.pending) { --after-checks: calc(7 * var(--step) + 180ms); animation: land 240ms var(--ease-out) var(--after-checks) both; }
+.verdict.DENY { animation: land 240ms var(--ease-out) var(--after-checks) both, shake 360ms var(--ease-out) calc(var(--after-checks) + 200ms); }
+@keyframes land { from { opacity: 0; transform: scale(0.97); } }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+@keyframes shake {
+  20%, 60% { transform: translateX(-10px); }
+  40%, 80% { transform: translateX(10px); }
+}
 .verdict.pending { background: var(--gray-100); color: var(--gray-500); }
 .verdict.ALLOW { background: var(--green-300); }
 .verdict.REQUIRE_APPROVAL { background: var(--yellow-300); }
@@ -92,10 +108,13 @@ h2 { font-size: 13px; font-weight: 600; color: var(--gray-500); margin: 0 0 12px
 .checks .check-label { font-weight: 600; width: 165px; }
 .checks .check-detail { color: var(--black); }
 .checks .check-status { width: 30px; text-align: center; font-weight: 700; }
-.checks tr.pass .check-status { color: var(--green-500); }
-.checks tr.warn { background: color-mix(in srgb, var(--yellow-300) 25%, var(--white)); }
-.checks tr.fail { background: var(--red-100); }
-.checks tr.fail .check-status { color: var(--red-500); }
+.checks .check-status span { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; font-size: 13px; }
+/* No row fills: the verdict is the one focal point. A rule shows its state with a left bar and a status badge. */
+.checks tr.pass .check-status span { color: var(--green-500); }
+.checks tr.warn .check-status span { background: var(--yellow-300); color: #141414; }
+.checks tr.fail .check-status span { background: var(--red-400); color: #ffffff; }
+.checks tr.warn td:first-child { box-shadow: inset 3px 0 0 var(--yellow-300); }
+.checks tr.fail td:first-child { box-shadow: inset 3px 0 0 var(--red-400); }
 
 .meter { position: relative; height: 6px; margin: 12px 0 18px; background: var(--gray-200); border-radius: 3px; }
 .meter-fill { height: 100%; border-radius: 3px; background: var(--green-300); }
@@ -118,6 +137,16 @@ h2 { font-size: 13px; font-weight: 600; color: var(--gray-500); margin: 0 0 12px
 .tx-result.bad { color: var(--red-500); }
 .tx-meta { display: flex; gap: 12px; font-size: 12px; color: var(--gray-500); margin: 4px 0; }
 .hash { font-size: 11px; word-break: break-all; color: var(--gray-500); }
+/* Evidence column: each transaction is a printed receipt. Torn bottom edge; new ones feed in from the top. */
+.evidence .tx {
+  border: 0;
+  border-radius: 4px 4px 0 0;
+  padding-bottom: 16px;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 10px 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 10px 100%;
+  animation: feed 260ms var(--ease-out) both;
+}
+@keyframes feed { from { opacity: 0; transform: translateY(-8px); } }
 .mono { font-family: var(--mono); }
 
 .log { margin: 0; padding-left: 18px; color: var(--gray-500); font-size: 14px; line-height: 1.7; }
@@ -135,6 +164,14 @@ h2 { font-size: 13px; font-weight: 600; color: var(--gray-500); margin: 0 0 12px
 .lane-ok .lane-big { color: var(--green-500); }
 .lane-bad { border-color: var(--red-400); background: var(--red-100); }
 .lane-bad .lane-big { color: var(--red-400); }
+
+/* Reduced motion: no movement, the page still changes colour and fades. The dark flip stays: it is a colour change. */
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+  button:active:not(:disabled) { transform: none; }
+  .verdict:not(.pending), .verdict.DENY, .checks tr, .evidence .tx { animation-name: fade; animation-duration: 200ms; animation-delay: 0ms; }
+  @keyframes fade { from { opacity: 0; } }
+}
 
 @media (max-width: 1440px) {
   .grid { grid-template-columns: 250px minmax(0, 1fr) 330px; gap: 16px; padding: 16px 20px; }
