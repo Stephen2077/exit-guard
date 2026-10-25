@@ -51,6 +51,12 @@ describe('evaluate', () => {
     expect(evaluate({ ...safe, pool: null }, { token, amountXrp: 1 }).outcome).toBe('DENY')
   })
 
+  it('DENYs when the exit cannot be priced (empty pool or bad amount)', () => {
+    expect(evaluate({ ...safe, pool: { token: 0, xrp: 0, fee: 0.005 } }, { token, amountXrp: 1 }).outcome).toBe('DENY')
+    expect(evaluate(safe, { token, amountXrp: NaN }).outcome).toBe('DENY')
+    expect(evaluate(safe, { token, amountXrp: 0 }).outcome).toBe('DENY')
+  })
+
   it('DENYs when exit cost is too high, even if amount alone would need approval', () => {
     const shallow = { ...safe, pool: { token: 5000, xrp: 5, fee: 0.005 } }
     expect(evaluate(shallow, { token, amountXrp: 8 }).outcome).toBe('DENY')

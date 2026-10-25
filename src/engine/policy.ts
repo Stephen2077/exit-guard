@@ -62,9 +62,12 @@ export function evaluate(s: Snapshot, req: BuyRequest, p: Policy = DEFAULT_POLIC
   if (!s.pool) add('R5', 'Exit cost', 'fail', 'No AMM pool. There is nowhere to sell.')
   else {
     const e = exitCost(s.pool, req.amountXrp)
-    const detail = `Selling would lose ${pct(e.cost)} vs. market price (pool: ${s.pool.xrp.toFixed(1)} XRP).`
-    const status = e.cost > p.maxExitCost ? 'fail' : e.cost > p.warnExitCost ? 'warn' : 'pass'
-    add('R5', 'Exit cost', status, detail)
+    if (!Number.isFinite(e.cost) || !(req.amountXrp > 0)) add('R5', 'Exit cost', 'fail', 'Could not price the exit (empty pool or bad amount).')
+    else {
+      const detail = `Selling this many tokens into the pool gets ${pct(e.cost)} below market price (pool: ${s.pool.xrp.toFixed(1)} XRP).`
+      const status = e.cost > p.maxExitCost ? 'fail' : e.cost > p.warnExitCost ? 'warn' : 'pass'
+      add('R5', 'Exit cost', status, detail)
+    }
   }
 
   if (req.amountXrp > p.autoLimitXrp) add('R6', 'Amount', 'warn', `${req.amountXrp} XRP is above the ${p.autoLimitXrp} XRP auto-limit.`)

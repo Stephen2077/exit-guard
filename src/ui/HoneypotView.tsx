@@ -40,9 +40,9 @@ export function HoneypotView({ hp, onUnfreeze }: { hp: Honeypot; onUnfreeze: () 
       </div>
 
       {hp.error && <p className="final">{hp.error}</p>}
-      {!hp.running && hp.agentSell && (
+      {!hp.running && (
         <div className="actions">
-          <span>Exit Guard blocks this buy before it happens (see the new DENY on the left).</span>
+          {hp.agentSell && <span>Exit Guard blocks this buy before it happens (see the new DENY on the left).</span>}
           <button onClick={onUnfreeze}>Unfreeze (reset)</button>
         </div>
       )}

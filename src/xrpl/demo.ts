@@ -114,13 +114,13 @@ async function ensureTrust(wallet: Wallet, token: Token): Promise<TxRecord[]> {
   return [await send(`Trust ${token.currency}`, wallet, { TransactionType: 'TrustSet', LimitAmount: amt(token, 1e9) })]
 }
 
-// Spend exactly `xrp` on the token at whatever the pool gives (the guard already priced it).
-export async function buy(wallet: Wallet, token: Token, xrp: number, label: string): Promise<TxRecord[]> {
+// Spend exactly `xrp` on the token. `minTokens` is the floor; without it, take whatever the pool gives.
+export async function buy(wallet: Wallet, token: Token, xrp: number, label: string, minTokens?: number): Promise<TxRecord[]> {
   const trust = await ensureTrust(wallet, token)
   const offer = await send(label, wallet, {
     TransactionType: 'OfferCreate',
     TakerGets: String(Math.round(xrp * 1e6)),
-    TakerPays: amt(token, '0.000001'),
+    TakerPays: amt(token, minTokens ? minTokens.toPrecision(15) : '0.000001'),
     Flags: tfSell | tfImmediateOrCancel,
   })
   return [...trust, offer]

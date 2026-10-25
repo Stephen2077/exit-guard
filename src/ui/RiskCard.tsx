@@ -11,7 +11,9 @@ const VERDICT: Record<Outcome, { icon: string; title: string; sub: string }> = {
 
 const STATUS_ICON: Record<Check['status'], string> = { pass: '✓', warn: '!', fail: '✕' }
 
-export function RiskCard({ entry, onApprove, onReject }: { entry: Entry; onApprove: () => void; onReject: () => void }) {
+type Props = { entry: Entry; busy: boolean; onApprove: () => void; onReject: () => void }
+
+export function RiskCard({ entry, busy, onApprove, onReject }: Props) {
   const { req, decision, status } = entry
   const v = decision && VERDICT[decision.outcome]
 
@@ -55,11 +57,15 @@ export function RiskCard({ entry, onApprove, onReject }: { entry: Entry; onAppro
       <div className="card-foot">
         {status === 'awaiting' && (
           <div className="actions">
-            <button className="primary" onClick={onApprove}>
+            <button className="primary" onClick={onApprove} disabled={busy}>
               Approve and buy
             </button>
-            <button onClick={onReject}>Reject</button>
-            <span className="muted">Exit Guard re-checks the ledger right before buying.</span>
+            <button onClick={onReject} disabled={busy}>
+              Reject
+            </button>
+            <span className="muted">
+              {busy ? 'Wait for the current transaction to finish.' : 'Exit Guard re-checks the ledger right before buying.'}
+            </span>
           </div>
         )}
         {status === 'executing' && <p className="muted">Sending to the ledger…</p>}

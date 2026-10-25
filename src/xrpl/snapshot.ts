@@ -46,8 +46,9 @@ export async function getSnapshot(token: Token, agent: string | null): Promise<S
     try {
       const r = await c.request({ command: 'account_lines', account: agent, peer: token.issuer, ledger_index: 'validated' })
       myLineFrozen = !!r.result.lines.find(l => l.currency === token.currency)?.freeze_peer
-    } catch {
-      // agent account not funded yet
+    } catch (e) {
+      // Only "agent account not funded yet" is safe to ignore; anything else must not read as "not frozen".
+      if ((e as { data?: { error?: string } }).data?.error !== 'actNotFound') throw e
     }
   }
 

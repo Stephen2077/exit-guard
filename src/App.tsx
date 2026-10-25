@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { exitCost } from './engine/amm'
 import { evaluate, type BuyRequest, type Decision, type Snapshot } from './engine/policy'
 import { NETWORK, getClient, type TxRecord } from './xrpl/client'
 import { buy, clearDemo, freezeHolder, loadDemo, sellAll, setupDemo, type Demo } from './xrpl/demo'
@@ -52,9 +53,11 @@ export default function App() {
     }
   }
 
-  async function execute(id: number, req: BuyRequest) {
+  async function execute(id: number, req: BuyRequest, snapshot: Snapshot) {
     patch(id, { status: 'executing' })
-    const sent = await buy(demo!.agent, req.token, req.amountXrp, `Agent buys ${req.token.currency} (${req.amountXrp} XRP)`)
+    // Accept at most 10% fewer tokens than the checked pool promised, so a pool change after the check cannot slip through.
+    const minTokens = snapshot.pool ? exitCost(snapshot.pool, req.amountXrp).tokens * 0.9 : undefined
+    const sent = await buy(demo!.agent, req.token, req.amountXrp, `Agent buys ${req.token.currency} (${req.amountXrp} XRP)`, minTokens)
     record(sent)
     const ok = sent[sent.length - 1].result === 'tesSUCCESS'
     patch(id, { status: ok ? 'bought' : 'failed', txs: sent })
@@ -68,7 +71,7 @@ export default function App() {
       const snapshot = await getSnapshot(req.token, demo!.agent.address)
       const decision = evaluate(snapshot, req)
       patch(id, { snapshot, decision })
-      if (decision.outcome === 'ALLOW') await execute(id, req)
+      if (decision.outcome === 'ALLOW') await execute(id, req, snapshot)
       else patch(id, { status: decision.outcome === 'DENY' ? 'blocked' : 'awaiting' })
     } catch (e) {
       patch(id, { status: 'failed', note: (e as Error).message })
@@ -78,10 +81,16 @@ export default function App() {
 
   async function approve(e: Entry) {
     patch(e.id, { status: 'executing' })
-    // Re-check right before buying: if the ledger changed for the worse, the approval no longer counts.
-    const decision = evaluate(await getSnapshot(e.req.token, demo!.agent.address), e.req)
-    if (decision.outcome === 'DENY') return patch(e.id, { decision, status: 'blocked', note: 'Re-checked before buying: conditions changed.' })
-    await execute(e.id, e.req)
+    try {
+      // Re-check right before buying: if the ledger changed for the worse, the approval no longer counts.
+      const snapshot = await getSnapshot(e.req.token, demo!.agent.address)
+      const decision = evaluate(snapshot, e.req)
+      patch(e.id, { snapshot, decision })
+      if (decision.outcome === 'DENY') return patch(e.id, { status: 'blocked', note: 'Re-checked before buying: conditions changed.' })
+      await execute(e.id, e.req, snapshot)
+    } catch (err) {
+      patch(e.id, { status: 'failed', note: (err as Error).message })
+    }
   }
 
   async function runHoneypot() {
@@ -93,9 +102,11 @@ export default function App() {
       state.buy = await buy(d.agent, d.SCAM, 2, 'Agent buys SCM, no guard (2 XRP)')
       record(state.buy)
       setHp({ ...state })
+      if (state.buy[state.buy.length - 1].result !== 'tesSUCCESS') throw new Error('The agent buy failed, so the demo stopped.')
       state.freeze = await freezeHolder(d.scamIssuer, d.agent.address, d.SCAM, true)
       record([state.freeze])
       setHp({ ...state })
+      if (state.freeze.result !== 'tesSUCCESS') throw new Error('The freeze failed, so the demo stopped.')
       const [agentSell, buyerBuy] = await Promise.all([
         sellAll(d.agent, d.SCAM, 'Agent tries to sell all SCM'),
         buy(d.buyer, d.SCAM, 1, 'New buyer buys SCM (1 XRP)').then(r => r[r.length - 1]),
@@ -113,6 +124,7 @@ export default function App() {
   async function unfreeze() {
     const t = await freezeHolder(demo!.scamIssuer, demo!.agent.address, demo!.SCAM, false)
     record([t])
+    if (t.result !== 'tesSUCCESS') return setHp(h => h && { ...h, error: `Unfreeze failed: ${t.result}` })
     setHp(null)
     setSelected(entries[0]?.id ?? null)
   }
@@ -169,7 +181,9 @@ export default function App() {
               <li className={selected === 'honeypot' ? 'sel' : ''} onClick={() => setSelected('honeypot')}>
                 <span className="time">demo</span>
                 <span className="what">No-guard demo</span>
-                <span className="chip DENY">{hp.running ? '…' : 'TRAPPED'}</span>
+                <span className={`chip ${hp.agentSell && hp.agentSell.result !== 'tesSUCCESS' ? 'DENY' : ''}`}>
+                  {hp.running ? '…' : hp.agentSell && hp.agentSell.result !== 'tesSUCCESS' ? 'TRAPPED' : 'STOPPED'}
+                </span>
               </li>
             )}
             {entries.map(e => (
@@ -213,7 +227,12 @@ export default function App() {
           ) : selected === 'honeypot' && hp ? (
             <HoneypotView hp={hp} onUnfreeze={unfreeze} />
           ) : current ? (
-            <RiskCard entry={current} onApprove={() => approve(current)} onReject={() => patch(current.id, { status: 'rejected' })} />
+            <RiskCard
+              entry={current}
+              busy={!!busy}
+              onApprove={() => approve(current)}
+              onReject={() => patch(current.id, { status: 'rejected' })}
+            />
           ) : (
             <section className="card">
               <h1>Pick an agent request on the left</h1>
