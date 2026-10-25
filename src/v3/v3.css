@@ -186,3 +186,15 @@ code { font: 400 0.9em var(--mono); color: var(--t1); }
 .act-said { margin: 16px 0 0; font-size: 16px; color: var(--t1); }
 .err { margin-top: 32px; padding: 20px 0; border-top: 1px solid var(--line); }
 .err p { margin: 0 0 16px; font-size: 18px; color: var(--red-text); }
+/* EN / 中 switch: two small text buttons; the current one is filled. */
+.lang { display: flex; gap: 4px; margin-left: 16px; }
+.lang button { font: 500 12px var(--mono); padding: 6px 8px; border-radius: 4px; border: 1px solid var(--line); color: var(--t3); }
+.lang button.on { background: var(--t1); border-color: var(--t1); color: var(--bg); }
+.lang button:hover:not(.on) { border-color: var(--t2); color: var(--t1); }
+/* Chinese verdict words are wider per character than the English ones. */
+.v-word:lang(zh) { font-size: 80px; letter-spacing: 0; }
+@media (max-width: 900px) {
+  .lang { margin-left: 8px; }
+  .v-word:lang(zh) { font-size: 52px; }
+}
+@media (min-width: 901px) { .v-word { white-space: nowrap; flex: none; } }

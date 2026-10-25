@@ -42,3 +42,18 @@ export function hint(d: Detected): string {
       return 'Looks like: an instruction · Claude reads it, Jev decides, the rules have the last word'
   }
 }
+
+export function hintZh(d: Detected): string {
+  switch (d.kind) {
+    case 'empty':
+      return '输入币名、发币方地址，或你想让代理做的事。'
+    case 'token':
+      return `看起来是：${d.issuer.slice(0, 6)}…${d.issuer.slice(-4)} 发的 ${d.code} · 不用模型`
+    case 'issuer':
+      return '看起来是：发币方地址 · 会列出它发的币'
+    case 'name':
+      return `看起来是：币名 · 有同名币时由 Jev 挑出真的 "${d.name}"`
+    case 'instruction':
+      return '看起来是：一句指令 · Claude 读，Jev 决定，规则说了算'
+  }
+}

@@ -12,6 +12,7 @@ import { searchTokens, UI_TIMEOUT_MS, type DirToken } from '../xrpl/directory'
 import { detect } from '../xrpl/intent'
 import { getSnapshot } from '../xrpl/snapshot'
 import { currencyName, parseToken } from '../xrpl/token'
+import { ACTION_ZH, evidenceZh, INTENT_ZH, ruleZh } from './zh'
 
 export type Env = { ANTHROPIC_API_KEY?: string; AI_GATEWAY_API_KEY?: string; JEV_MODEL?: string }
 type Reply = { status: number; body: unknown }
@@ -114,7 +115,7 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   if (!text) return { status: 400, body: { error: 'Send {"text": "..."}: a token name, an issuer address, or an instruction.' } }
 
   const steps: Step[] = []
-  const fail = (status: number, error: string) => ({ status, body: { error, steps } })
+  const fail = (status: number, error: string, errorZh: string) => ({ status, body: { error, errorZh, steps } })
   const d = detect(text)
 
   // 1. Read the words. Exact forms need no model.
@@ -126,9 +127,9 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   let amount: number | undefined = body.amountXrp !== undefined && body.amountXrp !== null && given > 0 ? given : undefined
   if (picked) {
     // A person already chose the token: no need to read the words again.
-  } else if (d.kind === 'token') ((code = d.code), (issuer = d.issuer), steps.push({ actor: 'parser', task: 'Reads the exact form', result: `token ${d.code} · ${short(d.issuer)}` }))
-  else if (d.kind === 'issuer') ((issuer = d.issuer), steps.push({ actor: 'parser', task: 'Reads the exact form', result: `issuer ${short(d.issuer)}` }))
-  else if (d.kind === 'name') ((name = d.name), steps.push({ actor: 'parser', task: 'Reads the exact form', result: `token name "${d.name}"` }))
+  } else if (d.kind === 'token') ((code = d.code), (issuer = d.issuer), steps.push({ actor: 'parser', task: 'Reads the exact form', taskZh: '读取精确格式', result: `token ${d.code} · ${short(d.issuer)}`, resultZh: `代币 ${d.code} · ${short(d.issuer)}` }))
+  else if (d.kind === 'issuer') ((issuer = d.issuer), steps.push({ actor: 'parser', task: 'Reads the exact form', taskZh: '读取精确格式', result: `issuer ${short(d.issuer)}`, resultZh: `发币方 ${short(d.issuer)}` }))
+  else if (d.kind === 'name') ((name = d.name), steps.push({ actor: 'parser', task: 'Reads the exact form', taskZh: '读取精确格式', result: `token name "${d.name}"`, resultZh: `代币名 "${d.name}"` }))
   else {
     const textIssuer = d.kind === 'instruction' ? d.issuer : undefined
     const textAmount = d.kind === 'instruction' ? d.amountXrp : undefined
@@ -137,15 +138,21 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
       ext = await claudeExtract(env, text)
     } catch (e) {
       // Without Claude, an address in the text is still enough to go on.
-      if (!textIssuer) return fail(502, `Claude could not read the message: ${(e as Error).message}`)
+      if (!textIssuer) return fail(502, `Claude could not read the message: ${(e as Error).message}`, 'Claude 没能读懂这句话，请稍后再试，或直接粘贴发币方地址。')
       ext = { intent: 'check', token_name: null, issuer: null, amount_xrp: null }
-      steps.push({ actor: 'parser', task: 'Reads the words', result: `issuer ${short(textIssuer)}`, note: `Claude unavailable (${(e as Error).message}): address read from the text` })
+      steps.push({ actor: 'parser', task: 'Reads the words', taskZh: '读你的话', result: `issuer ${short(textIssuer)}`, resultZh: `发币方 ${short(textIssuer)}`, note: `Claude unavailable (${(e as Error).message}): address read from the text`, noteZh: 'Claude 不可用：直接用文字里的地址' })
     }
     name = ext.token_name
     // What the text says exactly (an address, "50 XRP") wins over the model's reading.
     issuer = textIssuer ?? ext.issuer
     amount ??= textAmount ?? ext.amount_xrp ?? undefined
-    steps.push({ actor: 'claude', task: 'Reads the words', result: `${ext.intent} · ${name ? `"${name}"` : 'no token'} · ${amount ?? DEFAULT_XRP} XRP` })
+    steps.push({
+      actor: 'claude',
+      task: 'Reads the words',
+      taskZh: '读你的话',
+      result: `${ext.intent} · ${name ? `"${name}"` : 'no token'} · ${amount ?? DEFAULT_XRP} XRP`,
+      resultZh: `${INTENT_ZH[ext.intent]} · ${name ? `"${name}"` : '没有币名'} · ${amount ?? DEFAULT_XRP} XRP`,
+    })
     // 2. Jev decides the intent from fixed options. If Jev is down, Claude's reading stands, and the page says so.
     try {
       const j = await jevChoose(env, text, 'What does the user want the agent to do with the token?', [
@@ -154,10 +161,18 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
         { value: 'what_if', description: 'See what happens if the agent buys it anyway' },
       ])
       intent = j.choice as Intent
-      steps.push({ actor: 'jev', task: 'What does the user want?', result: intent, confidence: j.confidence })
+      steps.push({ actor: 'jev', task: 'What does the user want?', taskZh: '用户想做什么？', result: intent, resultZh: INTENT_ZH[intent], confidence: j.confidence })
     } catch (e) {
       intent = ext.intent
-      steps.push({ actor: 'claude', task: 'What does the user want?', result: intent, note: `Jev unavailable (${(e as Error).message}): Claude's reading used` })
+      steps.push({
+        actor: 'claude',
+        task: 'What does the user want?',
+        taskZh: '用户想做什么？',
+        result: intent,
+        resultZh: INTENT_ZH[intent],
+        note: `Jev unavailable (${(e as Error).message}): Claude's reading used`,
+        noteZh: 'Jev 不可用：用 Claude 读到的意图',
+      })
     }
   }
   const amountXrp = amount ?? DEFAULT_XRP
@@ -168,12 +183,12 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   try {
     if (picked) {
       const p = parseToken(body.pick!.currency as string, body.pick!.issuer as string)
-      if (!p.ok) return fail(400, p.error)
+      if (!p.ok) return fail(400, p.error, '代币格式不对：代码 1 到 20 个字符，地址以 r 开头。')
       token = { ...p.token, name: currencyName(p.token.currency) }
-      steps.push({ actor: 'parser', task: 'Which token?', result: `you picked ${token.name} · ${short(token.issuer)}` })
+      steps.push({ actor: 'parser', task: 'Which token?', taskZh: '哪个币？', result: `you picked ${token.name} · ${short(token.issuer)}`, resultZh: `你选了 ${token.name} · ${short(token.issuer)}` })
     } else if (code && issuer) {
       const p = parseToken(code, issuer)
-      if (!p.ok) return fail(400, p.error)
+      if (!p.ok) return fail(400, p.error, '代币格式不对：代码 1 到 20 个字符，地址以 r 开头。')
       token = { ...p.token, name: currencyName(p.token.currency) }
     } else if (issuer) {
       candidates = await issuedBy(issuer)
@@ -184,14 +199,14 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
       const r = await searchTokens(name, 8, undefined, UI_TIMEOUT_MS).catch(() => searchTokens(name!, 8, undefined, UI_TIMEOUT_MS))
       const exact = r.tokens.filter(t => t.name.toUpperCase() === name!.toUpperCase() || currencyName(t.currency).toUpperCase() === name!.toUpperCase())
       candidates = (exact.length ? exact : r.tokens).map(toCandidate)
-    } else return fail(400, 'No token in the message. Name one, like SOLO, or paste its issuer address.')
+    } else return fail(400, 'No token in the message. Name one, like SOLO, or paste its issuer address.', '这句话里没有币。写个币名（比如 SOLO），或粘贴发币方地址。')
   } catch (e) {
     const err = (e as { data?: { error?: string } }).data?.error
-    if (err === 'actNotFound') return fail(404, 'There is no account at this issuer address on mainnet.')
-    return fail(502, `Could not look up the token: ${(e as Error).message}`)
+    if (err === 'actNotFound') return fail(404, 'There is no account at this issuer address on mainnet.', '主网上没有这个发币方地址。')
+    return fail(502, `Could not look up the token: ${(e as Error).message}`, '查不到这个币，代币目录可能太慢。请再试一次。')
   }
 
-  if (!token && candidates.length === 0) return fail(404, `No token matching "${name ?? issuer}" was found.`)
+  if (!token && candidates.length === 0) return fail(404, `No token matching "${name ?? issuer}" was found.`, `找不到叫 "${name ?? issuer}" 的币。`)
   if (!token && candidates.length === 1) token = { currency: candidates[0].currency, issuer: candidates[0].issuer, name: candidates[0].name }
   if (!token) {
     const options = candidates.slice(0, 8).map((c, i) => ({
@@ -199,6 +214,7 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
       description: `${clip(c.name)} issued by ${clip(c.issuerName) || 'an unnamed issuer'} (${c.issuer}), ${c.holders ?? 'unknown'} holders, directory trust ${c.trustLevel ?? 0} of 3`,
     }))
     const task = `Which ${name ?? 'token'}? (${candidates.length} match)`
+    const taskZh = `哪个 ${name ?? '币'}？（${candidates.length} 个同名）`
     try {
       const j = await jevChoose(env, `The user wrote: "${text}"`, 'Which token does the user most likely mean? Copies often reuse a famous name; the original usually has far more holders and a known issuer.', options)
       const probs = new Map((j.probabilities ?? []).map(p => [p.value, p.probability]))
@@ -206,10 +222,19 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
       const chosen = candidates[Number(j.choice.slice(1))]
       if (j.confidence >= PICK_MIN) {
         token = { currency: chosen.currency, issuer: chosen.issuer, name: chosen.name }
-        steps.push({ actor: 'jev', task, result: `${chosen.name} by ${chosen.issuerName ?? short(chosen.issuer)}${chosen.holders ? ` · ${chosen.holders.toLocaleString('en-US')} holders` : ''}`, confidence: j.confidence })
-      } else steps.push({ actor: 'jev', task, result: 'Not sure enough: you pick', confidence: j.confidence })
+        const by = chosen.issuerName ?? short(chosen.issuer)
+        const held = chosen.holders ? chosen.holders.toLocaleString('en-US') : ''
+        steps.push({
+          actor: 'jev',
+          task,
+          taskZh,
+          result: `${chosen.name} by ${by}${held ? ` · ${held} holders` : ''}`,
+          resultZh: `${by} 的 ${chosen.name}${held ? ` · ${held} 个持有人` : ''}`,
+          confidence: j.confidence,
+        })
+      } else steps.push({ actor: 'jev', task, taskZh, result: 'Not sure enough: you pick', resultZh: '把握不够，请你来选', confidence: j.confidence })
     } catch (e) {
-      steps.push({ actor: 'parser', task, result: 'You pick', note: `Jev unavailable (${(e as Error).message})` })
+      steps.push({ actor: 'parser', task, taskZh, result: 'You pick', resultZh: '请你来选', note: `Jev unavailable (${(e as Error).message})`, noteZh: 'Jev 不可用' })
     }
     if (!token) {
       // No token chosen yet: an agent must not read "no verdict" as "no DENY". A person picks, or call check_token.
@@ -223,6 +248,7 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
         maxSafeXrp: null,
         action: { choice: 'human', by: 'rules' },
         source: 'Several tokens match. Pick one, or call check_token with the exact currency and issuer. Do not buy before a verdict.',
+        sourceZh: '有几个同名币。请选一个，或用 check_token 传入准确的代码和地址。出结论前不要买。',
       }
       return { status: 200, body: result }
     }
@@ -234,14 +260,22 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
     snapshot = await getSnapshot(token, null, NET)
   } catch (e) {
     const err = (e as { data?: { error?: string } }).data?.error
-    if (err === 'actNotFound') return fail(404, 'There is no account at this issuer address on mainnet.')
-    return fail(502, `Could not read the ledger: ${(e as Error).message}`)
+    if (err === 'actNotFound') return fail(404, 'There is no account at this issuer address on mainnet.', '主网上没有这个发币方地址。')
+    return fail(502, `Could not read the ledger: ${(e as Error).message}`, '读不到账本，请再试一次。')
   }
   const req = { token, amountXrp }
   const decision = evaluate(snapshot, req)
   const outcome: Outcome = decision.outcome
-  steps.push({ actor: 'rules', task: 'Can the agent sell it again?', result: outcome })
-  const checks = decision.checks.map(c => ({ id: c.id, label: c.label, status: c.status, detail: answerLine(c, snapshot, req), ledger: evidence(c.id, snapshot, false) }))
+  steps.push({ actor: 'rules', task: 'Can the agent sell it again?', taskZh: '代理还能卖出吗？', result: outcome })
+  const checks = decision.checks.map(c => ({
+    id: c.id,
+    label: c.label,
+    status: c.status,
+    detail: answerLine(c, snapshot, req),
+    detailZh: ruleZh(c, snapshot, req),
+    ledger: evidence(c.id, snapshot, false),
+    ledgerZh: evidenceZh(c.id, snapshot),
+  }))
   const maxSafeXrp = snapshot.pool ? Math.round(maxSafeBuy(snapshot.pool, DEFAULT_POLICY.warnExitCost) * 100) / 100 : null
 
   // 5. What the agent does. ALLOW and DENY are the rules' call. Only an approval case asks Jev, and doubt means a human.
@@ -249,6 +283,7 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
   if (outcome === 'REQUIRE_APPROVAL') {
     const warnings = checks.filter(c => c.status !== 'pass').map(c => c.detail).join(' ')
     const task = 'Approval needed: what should the agent do?'
+    const taskZh = '需要批准：代理该怎么做？'
     try {
       const j = await jevChoose(
         env,
@@ -268,12 +303,15 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
       steps.push({
         actor: 'jev',
         task,
+        taskZh,
         result: words[said],
+        resultZh: ACTION_ZH[said],
         confidence: j.confidence,
         note: choice !== said ? `Under ${ACT_MIN * 100}% sure, so it goes to a human` : undefined,
+        noteZh: choice !== said ? `把握不到 ${ACT_MIN * 100}%，转人工` : undefined,
       })
     } catch (e) {
-      steps.push({ actor: 'rules', task, result: 'Ask a human', note: `Jev unavailable (${(e as Error).message})` })
+      steps.push({ actor: 'rules', task, taskZh, result: 'Ask a human', resultZh: '转人工', note: `Jev unavailable (${(e as Error).message})`, noteZh: 'Jev 不可用' })
     }
   }
 
@@ -289,6 +327,7 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
     action,
     ledger: { time: new Date().toISOString() },
     source: `Live: mainnet ledger read at ${new Date().toISOString().slice(11, 19)} UTC. Intent: ${intent}.`,
+    sourceZh: `实时：${new Date().toISOString().slice(11, 19)} UTC 读取主网账本。意图：${INTENT_ZH[intent]}。`,
   }
   return { status: 200, body: result }
 }

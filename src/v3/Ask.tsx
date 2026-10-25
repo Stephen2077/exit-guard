@@ -2,7 +2,8 @@
 // Live by default (POST /api/agent). ?state=... shows the design preview with sample data instead.
 import { useRef, useState } from 'react'
 import type { Outcome } from '../engine/policy'
-import { detect, hint } from '../xrpl/intent'
+import { detect, hint, hintZh } from '../xrpl/intent'
+import { useLang, useT } from './lang'
 import { APPROVAL, ALLOW, CHOOSE, DENY } from './fixtures'
 import { Candidates, Pipeline, Verdict, type Handlers } from './Result'
 import type { AgentResult, Candidate, Step } from './types'
@@ -10,11 +11,11 @@ import type { AgentResult, Candidate, Step } from './types'
 export type Preview = 'empty' | 'checking' | 'allow' | 'approval' | 'deny' | 'choose'
 
 // Each example shows the verdict it got on a real mainnet check, so the page shows output before any click.
-const EXAMPLES: { text: string; label?: string; outcome?: Outcome }[] = [
+const EXAMPLES: { text: string; label?: string; labelZh?: string; outcome?: Outcome }[] = [
   { text: 'buy 50 XRP of SOLO', outcome: 'REQUIRE_APPROVAL' },
   { text: 'is RLUSD safe to buy?', outcome: 'REQUIRE_APPROVAL' },
   // A copy that reuses the RLUSD name: 19 holders and no AMM pool (mainnet check, 2026-10-25).
-  { text: 'buy 2 XRP of RLUSD from rLUSDv9MRcCwPdBUZCGkG4u4EtdMMA1qYM', label: 'buy a fake RLUSD', outcome: 'DENY' },
+  { text: 'buy 2 XRP of RLUSD from rLUSDv9MRcCwPdBUZCGkG4u4EtdMMA1qYM', label: 'buy a fake RLUSD', labelZh: '买一个假 RLUSD', outcome: 'DENY' },
   { text: 'rsoLo2S1kiGeCcn6hCUXVrCpGMWLrRrLZz' },
 ]
 const TAG: Record<Outcome, string> = { ALLOW: 'ALLOW', REQUIRE_APPROVAL: 'APPROVAL', DENY: 'DENY' }
@@ -23,19 +24,26 @@ const SAMPLE: Record<Exclude<Preview, 'empty' | 'checking'>, AgentResult> = { al
 
 // What the pipeline looks like before anything runs: the order every request goes through.
 const HOW: Step[] = [
-  { actor: 'claude', task: 'Reads the words', result: 'intent · token · amount' },
-  { actor: 'jev', task: 'A decision model: picks from fixed options and says how sure it is', result: 'buy or check · which token' },
-  { actor: 'rules', task: '8 ledger checks', result: 'ALLOW · REQUIRE_APPROVAL · DENY' },
+  { actor: 'claude', task: 'Reads the words', taskZh: '读你的话', result: 'intent · token · amount', resultZh: '意图 · 币 · 金额' },
+  {
+    actor: 'jev',
+    task: 'A decision model: picks from fixed options and says how sure it is',
+    taskZh: '一个决策模型：只在给定选项里选，并给出把握',
+    result: 'buy or check · which token',
+    resultZh: '买还是查 · 哪个币',
+  },
+  { actor: 'rules', task: '8 ledger checks', taskZh: '8 项账本检查', result: 'ALLOW · REQUIRE_APPROVAL · DENY' },
 ]
 // While a live request runs we do not know its steps yet: show the three stages, the first one running.
 const PENDING: Step[] = [
-  { actor: 'claude', task: 'Reads the words', result: '' },
-  { actor: 'jev', task: 'Decides from fixed options', result: '' },
-  { actor: 'rules', task: 'Can the agent sell it again?', result: '' },
+  { actor: 'claude', task: 'Reads the words', taskZh: '读你的话', result: '' },
+  { actor: 'jev', task: 'Decides from fixed options', taskZh: '在给定选项里做决定', result: '' },
+  { actor: 'rules', task: 'Can the agent sell it again?', taskZh: '代理还能卖出吗？', result: '' },
 ]
 const RULE_NAMES = ['frozen now', 'can freeze later', 'can take tokens back', 'holder concentration', 'exit cost', 'can pull the pool', 'transfer fee', 'amount']
+const RULE_NAMES_ZH = ['现在冻结', '以后能冻结', '能收回币', '持币集中度', '退出成本', '能抽走池子', '转账费', '金额']
 
-type Phase = { kind: 'idle' } | { kind: 'checking' } | { kind: 'done'; r: AgentResult } | { kind: 'error'; message: string; steps: Step[] }
+type Phase = { kind: 'idle' } | { kind: 'checking' } | { kind: 'done'; r: AgentResult } | { kind: 'error'; message: string; messageZh: string; steps: Step[] }
 
 export function Ask({ preview }: { preview: Preview | null }) {
   const sample = preview && preview !== 'empty' && preview !== 'checking' ? SAMPLE[preview] : undefined
@@ -44,6 +52,8 @@ export function Ask({ preview }: { preview: Preview | null }) {
   const asked = useRef(0) // only the latest request may update the page
   const lastQ = useRef('') // what was asked, even if the box has been edited since
   const d = detect(text)
+  const t = useT()
+  const zh = useLang() === 'zh'
 
   async function ask(input: string, extra: { pick?: Candidate; amountXrp?: number } = {}) {
     const q = input.trim()
@@ -60,10 +70,17 @@ export function Ask({ preview }: { preview: Preview | null }) {
       })
       const body = await res.json()
       if (id !== asked.current) return
-      if (!res.ok) setPhase({ kind: 'error', message: body.error ?? `Request failed (${res.status}).`, steps: body.steps ?? [] })
+      if (!res.ok)
+        setPhase({ kind: 'error', message: body.error ?? `Request failed (${res.status}).`, messageZh: body.errorZh ?? `请求失败（${res.status}）。`, steps: body.steps ?? [] })
       else setPhase({ kind: 'done', r: body as AgentResult })
     } catch {
-      if (id === asked.current) setPhase({ kind: 'error', message: 'Could not reach Exit Guard. Check that the server is running, then try again.', steps: [] })
+      if (id === asked.current)
+        setPhase({
+          kind: 'error',
+          message: 'Could not reach Exit Guard. Check that the server is running, then try again.',
+          messageZh: '连不上 Exit Guard。请确认服务在运行，再试一次。',
+          steps: [],
+        })
     }
   }
 
@@ -82,8 +99,19 @@ export function Ask({ preview }: { preview: Preview | null }) {
       {/* The headline only on the empty page: once there is a result, the verdict gets the space. */}
       {idle && (
         <section className="hero">
-          <h1>Let your agent buy tokens without buying traps.</h1>
-          <p>Before an AI agent buys an XRPL token, Exit Guard checks it can sell it again.</p>
+          {/* Chinese lines break between any two characters: put the break at the comma ourselves. */}
+          <h1>
+            {zh ? (
+              <>
+                让你的代理买币，
+                <br />
+                不买陷阱。
+              </>
+            ) : (
+              'Let your agent buy tokens without buying traps.'
+            )}
+          </h1>
+          <p>{t('Before an AI agent buys an XRPL token, Exit Guard checks it can sell it again.', 'AI 代理买 XRPL 代币之前，Exit Guard 先检查它还能不能卖出去。')}</p>
         </section>
       )}
       {!idle && <h1 className="sr-only">Exit Guard</h1>}
@@ -100,31 +128,31 @@ export function Ask({ preview }: { preview: Preview | null }) {
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder="buy 50 XRP of SOLO"
-          aria-label="What should your agent check?"
+          aria-label={t('What should your agent check?', '要让代理检查什么？')}
           aria-describedby="omni-hint"
           spellCheck={false}
         />
         <button className="primary" type="submit" disabled={phase.kind === 'checking' || !text.trim()}>
-          {phase.kind === 'checking' ? 'Checking…' : 'Check before buying'}
+          {phase.kind === 'checking' ? t('Checking…', '检查中…') : t('Check before buying', '买前检查')}
         </button>
       </form>
       <p className="omni-hint" id="omni-hint">
-        {hint(d)}
+        {zh ? hintZh(d) : hint(d)}
       </p>
 
       {idle && (
         <>
           <div className="try">
-            <span>Try</span>
+            <span>{t('Try', '试试')}</span>
             {EXAMPLES.map(x => (
               <button key={x.text} className="chip" onClick={() => (preview ? setText(x.text) : ask(x.text))}>
-                {x.label ?? (x.text.length > 26 ? `${x.text.slice(0, 12)}…${x.text.slice(-6)}` : x.text)}
+                {(zh ? x.labelZh : undefined) ?? x.label ?? (x.text.length > 26 ? `${x.text.slice(0, 12)}…${x.text.slice(-6)}` : x.text)}
                 {x.outcome && <span className={`tag o-${x.outcome}`}>{TAG[x.outcome]}</span>}
               </button>
             ))}
           </div>
           <section className="how">
-            <h2>Every request goes through the same three steps</h2>
+            <h2>{t('Every request goes through the same three steps', '每个请求都走同样的三步')}</h2>
             <Pipeline steps={HOW} />
           </section>
         </>
@@ -140,7 +168,7 @@ export function Ask({ preview }: { preview: Preview | null }) {
                 const done = preview === 'checking' && i < 2
                 return (
                   <div key={n} className={`sk-row ${done ? 'done' : ''}`}>
-                    <span>[{done ? '✓' : '·'}]</span> R{i + 1} {n} <span className="dots" /> {done ? APPROVAL.checks[i].ledger : ''}
+                    <span>[{done ? '✓' : '·'}]</span> R{i + 1} {zh ? RULE_NAMES_ZH[i] : n} <span className="dots" /> {done ? APPROVAL.checks[i].ledger : ''}
                   </div>
                 )
               })}
@@ -152,9 +180,9 @@ export function Ask({ preview }: { preview: Preview | null }) {
           <section className="result">
             {phase.steps.length > 0 && <Pipeline steps={phase.steps} />}
             <div className="err" role="alert">
-              <p>{phase.message}</p>
+              <p>{zh ? phase.messageZh : phase.message}</p>
               <button className="ghost" onClick={() => ask(lastQ.current)}>
-                Try again
+                {t('Try again', '再试一次')}
               </button>
             </div>
           </section>
@@ -168,7 +196,7 @@ export function Ask({ preview }: { preview: Preview | null }) {
             ) : (
               <Verdict key={phase.r.ledger?.time} r={phase.r} h={handlers} />
             )}
-            {phase.r.source && <p className="source">{phase.r.source}</p>}
+            {phase.r.source && <p className="source">{(zh && phase.r.sourceZh) || phase.r.source}</p>}
           </section>
         )}
       </div>

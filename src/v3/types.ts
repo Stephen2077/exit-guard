@@ -10,9 +10,13 @@ export type Step = {
   result: string // what it answered
   confidence?: number // Jev only, 0..1
   note?: string // e.g. "Jev unavailable: Claude answered instead"
+  // Chinese versions from the server, so the page can switch language without asking the models again.
+  taskZh?: string
+  resultZh?: string
+  noteZh?: string
 }
 
-export type RuleCheck = { id: string; label: string; status: CheckStatus; detail: string; ledger: string }
+export type RuleCheck = { id: string; label: string; status: CheckStatus; detail: string; detailZh?: string; ledger: string; ledgerZh?: string }
 
 export type Candidate = { currency: string; issuer: string; name: string; issuerName?: string; domain?: string; holders?: number; trustLevel?: number; probability?: number }
 
@@ -35,4 +39,5 @@ export type AgentResult = {
   event?: { label: string; type: string; hash?: string; result: string; ledger?: number }
   before?: { outcome: Outcome; time: string }
   source?: string // where the data came from, said on screen
+  sourceZh?: string
 }
