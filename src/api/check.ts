@@ -1,11 +1,12 @@
 // The API behind /api/check and /api/search: the same checks as the page, as JSON for AI agents.
 // Read-only on both networks: nothing here can send a transaction.
 import { evaluate } from '../engine/policy'
+import { roundTripQuote } from '../engine/amm'
 import { LIMITS, NO_POOL, answerLine, evidence, lookalikeNote, onlyNoPool } from '../exit/words'
 import type { Net } from '../xrpl/client'
 import { lookalikes, searchTokens, tokenInfo } from '../xrpl/directory'
 import { getSnapshot } from '../xrpl/snapshot'
-import { currencyName, parseToken } from '../xrpl/token'
+import { currencyName, parseToken, validateWallet } from '../xrpl/token'
 
 type Reply = { status: number; body: unknown }
 
@@ -20,13 +21,16 @@ export async function checkFromQuery(q: URLSearchParams): Promise<Reply> {
   if (!p.ok) return { status: 400, body: { error: p.error } }
   const amountXrp = Number(q.get('amount') ?? '2')
   if (!(Number.isFinite(amountXrp) && amountXrp > 0)) return { status: 400, body: { error: 'amount must be a number of XRP above 0.' } }
+  let wallet: string | null
+  try { wallet = validateWallet(q.get('wallet') ?? '') }
+  catch (error) { return { status: 400, body: { error: (error as Error).message } } }
 
   const token = p.token
   const req = { token, amountXrp }
   try {
     // The directory is only a hint, with its own time limit. If it is down, the check still answers.
     const directory = net === 'mainnet' ? readDirectory(token) : Promise.resolve(undefined)
-    const snapshot = await getSnapshot(token, null, net as Net)
+    const snapshot = await getSnapshot(token, wallet, net as Net)
     const decision = evaluate(snapshot, req)
     return {
       status: 200,
@@ -36,11 +40,15 @@ export async function checkFromQuery(q: URLSearchParams): Promise<Reply> {
         token: { currency: token.currency, name: currencyName(token.currency), issuer: token.issuer },
         net,
         amountXrp,
-        checks: decision.checks.map(c => ({ ...c, detail: answerLine(c, snapshot, req), ledger: evidence(c.id, snapshot, false) })),
+        wallet,
+        evidence: snapshot.evidence,
+        ammRoundTrip: snapshot.pool && !snapshot.poolFrozen && !snapshot.globalFreeze && snapshot.myLineFrozen !== true
+          ? roundTripQuote(snapshot.pool, amountXrp) : null,
+        checks: decision.checks.map(c => ({ ...c, detail: answerLine(c, snapshot, req), ledger: evidence(c.id, snapshot, !!wallet) })),
         directory: await directory,
         limits: LIMITS,
-        checkedAt: new Date().toISOString(),
-        meaning: 'ALLOW: buy. REQUIRE_APPROVAL: ask a human first. DENY: do not buy; final.',
+        checkedAt: snapshot.evidence?.queriedAt,
+        meaning: 'Policy only: ALLOW means no current rule blocked this amount; REQUIRE_APPROVAL means review risks or missing data; DENY blocks buying. No transaction is sent, and no outcome guarantees sellability.',
       },
     }
   } catch (e) {

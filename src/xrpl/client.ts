@@ -9,7 +9,8 @@ export const MAINNET = 'wss://xrplcluster.com'
 export const EXPLORER = 'https://testnet.xrpl.org/transactions/'
 export const EXPLORER_HOST: Record<Net, string> = { testnet: 'https://testnet.xrpl.org', mainnet: 'https://livenet.xrpl.org' }
 
-const clients: Record<Net, Client> = { testnet: new Client(NETWORK), mainnet: new Client(MAINNET) }
+const readOptions = { connectionTimeout: 10_000, timeout: 15_000 }
+const clients: Record<Net, Client> = { testnet: new Client(NETWORK, readOptions), mainnet: new Client(MAINNET, readOptions) }
 const connecting: Partial<Record<Net, Promise<void>>> = {}
 
 export async function getClient(net: Net = 'testnet'): Promise<Client> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currencyCode, currencyName, parseToken } from './token'
+import { currencyCode, currencyName, parseToken, validateWallet } from './token'
 
 const RLUSD_HEX = '524C555344000000000000000000000000000000'
 const ISSUER = 'rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De'
@@ -13,6 +13,18 @@ describe('currency codes', () => {
   it('turns longer codes into 40 hex characters', () => {
     expect(currencyCode('RLUSD')).toBe(RLUSD_HEX)
     expect(currencyCode(RLUSD_HEX.toLowerCase())).toBe(RLUSD_HEX)
+  })
+
+  it('canonicalizes standard hex currency codes and rejects encoded XRP', () => {
+    expect(currencyCode(`${'0'.repeat(24)}555344${'0'.repeat(10)}`)).toBe('USD')
+    expect(parseToken(`${'0'.repeat(24)}585250${'0'.repeat(10)}`, ISSUER).ok).toBe(false)
+    expect(parseToken(`585250${'0'.repeat(34)}`, ISSUER).ok).toBe(false)
+  })
+
+  it('accepts only optional public classic wallet addresses', () => {
+    expect(validateWallet('')).toBeNull()
+    expect(validateWallet(` ${ISSUER} `)).toBe(ISSUER)
+    expect(() => validateWallet('not-an-address')).toThrow()
   })
 
   it('reads hex codes back as names', () => {

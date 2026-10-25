@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { short } from '../ui/format'
 import type { Net } from '../xrpl/client'
 import { safeIcon, searchTokens, type DirToken } from '../xrpl/directory'
-import { currencyName, parseToken } from '../xrpl/token'
+import { currencyName, parseToken, validateWallet } from '../xrpl/token'
 import { EntrySign, IdleSign } from './Sign'
-import { Questions, Recent, TokenFacts } from './Side'
+import { Questions, Recent, TokenFacts, QueryEvidence } from './Side'
 import type { Guard } from './useExitGuard'
 import { claimedDomain, num } from './words'
 
@@ -24,6 +24,7 @@ export function CheckPage({ g }: { g: Guard }) {
           />
         )}
         <aside className="side">
+          {e?.snapshot && <QueryEvidence e={e} />}
           {e && <TokenFacts e={e} />}
           <Questions e={e} empty="Pick a token from the search. The answers show up here, with the ledger values behind them." />
           <Recent entries={g.checkEntries} currentId={e?.id} onPick={g.setCheckId} />
@@ -43,6 +44,7 @@ function SearchBar({ g }: { g: Guard }) {
   const [active, setActive] = useState(0)
   const [manual, setManual] = useState(false) // check an exact issuer address instead of searching
   const [issuer, setIssuer] = useState('')
+  const [wallet, setWallet] = useState('')
   const [net, setNet] = useState<Net>('mainnet')
   const [error, setError] = useState<string | null>(null)
   const box = useRef<HTMLDivElement>(null)
@@ -96,7 +98,9 @@ function SearchBar({ g }: { g: Guard }) {
     if (xrp === null || !list) return
     setOpen(false)
     setError(null)
-    void g.checkToken({ token: { currency: t.currency, issuer: t.issuer }, amountXrp: xrp }, 'mainnet', { q: q.trim(), top: list[0], holders: t.holders })
+    try {
+      void g.checkToken({ token: { currency: t.currency, issuer: t.issuer }, amountXrp: xrp }, 'mainnet', { q: q.trim(), top: list[0], holders: t.holders }, validateWallet(wallet))
+    } catch (err) { setError((err as Error).message) }
   }
 
   function checkExact() {
@@ -105,7 +109,9 @@ function SearchBar({ g }: { g: Guard }) {
     const xrp = amountXrp()
     if (xrp === null) return
     setError(null)
-    void g.checkToken({ token: p.token, amountXrp: xrp }, net)
+    try {
+      void g.checkToken({ token: p.token, amountXrp: xrp }, net, undefined, validateWallet(wallet))
+    } catch (err) { setError((err as Error).message) }
   }
 
   function onSearchKey(ev: KeyboardEvent<HTMLInputElement>) {
@@ -181,6 +187,10 @@ function SearchBar({ g }: { g: Guard }) {
           </>
         )}
       </div>
+      <label className="wallet-query">
+        Your wallet (optional, public address only)
+        <input value={wallet} onChange={event => setWallet(event.target.value)} onKeyDown={onExactKey} placeholder="r… — check your own freeze status" spellCheck={false} autoComplete="off" />
+      </label>
       <p className="search-help">
         {manual ? (
           <>

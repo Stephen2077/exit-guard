@@ -218,6 +218,13 @@ code, .mono { font-family: var(--mono); }
 .receipts .m a { color: var(--ink-2); }
 
 /* API page */
+.wallet-query { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; }
+.wallet-query input { flex: 1; min-width: 220px; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; font: inherit; background: var(--paper); color: var(--ink); }
+.query-evidence p { margin-bottom: 12px; }
+.query-evidence .wrap { overflow-wrap: anywhere; }
+.query-evidence summary { cursor: pointer; font-weight: 600; }
+.query-evidence ul { padding-left: 20px; }
+.query-evidence li { margin: 8px 0; }
 .api-page { overflow: auto; padding: 4px 28px 48px; }
 .doc { max-width: 880px; padding: 36px 44px; border-radius: 16px; background: var(--paper); }
 .doc h1 { margin-bottom: 12px; font: 800 44px/1 var(--head); letter-spacing: -0.03em; }

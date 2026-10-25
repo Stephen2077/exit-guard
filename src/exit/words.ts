@@ -16,9 +16,9 @@ export const num = (x: number) => x.toLocaleString('en-US', { maximumFractionDig
 
 // The sign's words for each verdict, and the short tag used in lists.
 export const SIGN: Record<Outcome, { title: string; sub: string; tag: string }> = {
-  ALLOW: { title: 'Exit open.', sub: 'Buying in is fine, and selling back out works.', tag: 'ALLOW' },
-  REQUIRE_APPROVAL: { title: 'Exit narrow.', sub: 'There is a way out, but it has risks. A human must say yes.', tag: 'APPROVAL' },
-  DENY: { title: 'No exit.', sub: 'One failed check is enough to say no.', tag: 'DENY' },
+  ALLOW: { title: 'Checks passed.', sub: 'No current rule blocked this amount. This does not guarantee a future sale.', tag: 'ALLOW' },
+  REQUIRE_APPROVAL: { title: 'Review first.', sub: 'Review the risk flags and any missing data before buying.', tag: 'APPROVAL' },
+  DENY: { title: 'Blocked.', sub: 'The current policy blocks this request. See the risk or coverage issue below.', tag: 'DENY' },
 }
 
 export const QUESTIONS = [
@@ -42,6 +42,7 @@ export function signLine(c: Check, s: Snapshot, req: BuyRequest): string {
   switch (c.id) {
     case 'R1':
       if (c.status === 'pass') return 'Not frozen right now.'
+      if (s.myLineFrozen === null && !s.globalFreeze) return 'Wallet-specific freeze status is unknown.'
       return s.globalFreeze ? 'The issuer froze all trading.' : 'The issuer froze the tokens in this wallet.'
     case 'R2':
       if (c.status !== 'pass') return 'The issuer kept the power to freeze.'
@@ -49,16 +50,17 @@ export function signLine(c: Check, s: Snapshot, req: BuyRequest): string {
     case 'R3':
       return c.status === 'pass' ? 'The issuer cannot take tokens back.' : 'The issuer can take tokens back.'
     case 'R4':
-      return s.top1Share === null ? 'No other holders in the first 400 trust lines.' : `One wallet holds ${pct(s.top1Share)} of the supply.`
+      return s.top1Share === null ? 'Holder distribution is unknown.' : `Largest included holder: ${pct(s.top1Share)} of the balances read${s.evidence?.holdersComplete === false ? ' (partial sample)' : ''}.`
     case 'R5': {
       if (!s.pool) return 'No AMM pool to sell into. Order books are not counted yet.'
+      if (s.poolFrozen) return 'This AMM is frozen; no usable sell quote is available.'
       const { cost } = exitCost(s.pool, req.amountXrp)
-      return Number.isFinite(cost) ? `Selling ${xrp} worth loses ${pct(cost)}.` : c.detail
+      return Number.isFinite(cost) ? `AMM sell price impact: ${pct(cost)} below the pre-buy spot price.` : c.detail
     }
     case 'R6':
-      return s.issuerLpShare === null ? 'There is no pool to pull.' : `The issuer owns ${pct(s.issuerLpShare)} of the pool.`
+      return s.issuerLpShare === null ? 'The issuer’s liquidity control could not be determined.' : `The issuer owns ${pct(s.issuerLpShare)} of the pool.`
     case 'R7':
-      return s.transferFee > 0 ? `The issuer keeps ${pct(s.transferFee)} of every sale.` : 'No fee on sales.'
+      return s.transferFee > 0 ? `Additional token transfer rate: ${pct(s.transferFee)}.` : 'No issuer transfer rate is set.'
     case 'R8':
       return `${xrp} is ${c.status === 'pass' ? 'under' : 'over'} the ${DEFAULT_POLICY.autoLimitXrp} XRP auto-limit.`
     default:
@@ -68,11 +70,11 @@ export function signLine(c: Check, s: Snapshot, req: BuyRequest): string {
 
 // The answer under each question: the engine's sentence, with numbers made readable where the engine prints raw ones.
 export function answerLine(c: Check, s: Snapshot, req: BuyRequest): string {
-  if (c.id === 'R5' && s.pool) {
+  if (c.id === 'R5' && s.pool && !s.poolFrozen) {
     const { cost } = exitCost(s.pool, req.amountXrp)
-    if (Number.isFinite(cost)) return `Selling this many tokens into the pool gets ${pct(cost)} below market price (pool: ${num(s.pool.xrp)} XRP).`
+    if (Number.isFinite(cost)) return `AMM sell price impact is ${pct(cost)} below the pre-buy spot price (pool: ${num(s.pool.xrp)} XRP). This is not the buy-then-sell loss.`
   }
-  if (c.id === 'R7' && s.transferFee > 0) return `Issuer takes ${pct(s.transferFee)} of every sale.`
+  if (c.id === 'R7' && s.transferFee > 0) return `Transfers between holders debit an additional ${pct(s.transferFee)} in tokens. Direct issuer transfers are exempt. This charge is excluded from the AMM model.`
   if (c.id === 'R6' && s.issuerLpShare !== null && c.status === 'pass') return `Issuer owns ${pct(s.issuerLpShare)} of the pool.`
   return c.detail
 }
@@ -81,21 +83,21 @@ export function answerLine(c: Check, s: Snapshot, req: BuyRequest): string {
 export function evidence(id: string, s: Snapshot, wallet: boolean): string {
   switch (id) {
     case 'R1':
-      return `globalFreeze: ${s.globalFreeze}` + (wallet ? ` · this wallet frozen: ${s.myLineFrozen}` : '')
+      return `globalFreeze: ${s.globalFreeze}` + (wallet ? ` · this wallet frozen: ${s.myLineFrozen === null ? 'unknown' : s.myLineFrozen}` : ' · no wallet checked')
     case 'R2':
       return `noFreeze: ${s.noFreeze}`
     case 'R3':
       return `allowTrustLineClawback: ${s.clawback}`
     case 'R4':
       return s.top1Share === null
-        ? 'no other holders in the first 400 trust lines'
-        : `largest other holder: ${pct(s.top1Share)} (first 400 trust lines only)`
+        ? 'no included holder balance was available'
+        : `largest included holder: ${pct(s.top1Share)} · ${s.evidence?.holderLines ?? 'unknown number of'} lines read · ${s.evidence?.holdersComplete ? 'all pages read' : 'partial or unknown coverage'}`
     case 'R5':
       return s.pool
         ? `AMM pool ${num(s.pool.token)} ${currencyName(s.token.currency)} / ${num(s.pool.xrp)} XRP · fee ${pct(s.pool.fee)}`
         : 'no AMM pool · order books are not counted yet'
     case 'R6':
-      return s.issuerLpShare === null ? 'no AMM pool' : `issuer holds ${pct(s.issuerLpShare)} of the LP tokens`
+      return s.issuerLpShare === null ? 'issuer LP share unknown' : `issuer holds ${pct(s.issuerLpShare)} of the LP tokens`
     case 'R7':
       return s.transferFee > 0 ? `TransferRate: ${Math.round((1 + s.transferFee) * 1e9)}` : 'TransferRate: not set'
     case 'R8':
@@ -109,7 +111,7 @@ export function evidence(id: string, s: Snapshot, wallet: boolean): string {
 export const claimedDomain = (domain: string) => `says ${domain.replace(/^https?:\/\//, '').replace(/\/+$/, '')}`
 
 // No holders in the first 400 trust lines and no pool: the code or the issuer is probably wrong.
-export const looksEmpty = (s: Snapshot) => s.top1Share === null && !s.pool
+export const looksEmpty = (s: Snapshot) => s.top1Share === null && !s.pool && s.evidence?.holdersComplete === true
 
 // Is this the token people usually mean by this code? Impostors reuse a well-known code under a new issuer.
 // `look.same` = directory tokens with the same code, most holders first, from the closest name matches only.
@@ -133,12 +135,17 @@ export const onlyNoPool = (d: Decision, s: Snapshot) =>
   d.outcome === 'DENY' && !s.pool && d.checks.filter(c => c.status === 'fail').every(c => c.id === 'R5')
 
 export const NO_POOL = {
-  title: 'No AMM exit.',
-  sub: 'No AMM pool found. Order books are not counted yet, so check them before you trust this.',
+  title: 'Coverage incomplete.',
+  sub: 'No token/XRP AMM was found. Order books and other routes were not checked; this does not prove the token cannot be sold.',
   api: 'DENY only because no AMM pool was found. Order books are not counted yet: the token may still be sellable there.',
 }
 
-export const LIMITS = ['Holders are read from the first 400 trust lines only.', 'Exit cost reads AMM pools only; order books are not counted yet.']
+export const LIMITS = [
+  'Holder reads stop after five pages of up to 400 trust lines; a remaining marker means a partial sample.',
+  'Holder percentages describe included balances read, excluding the AMM and optional wallet, not total issued supply.',
+  'AMM estimates exclude issuer transfer charges, network fees, rounding, order books, other routes and competing trades.',
+  'Authorization requirements and liquidity-provider concentration beyond the issuer are not checked.',
+]
 
 // Picked from a name search, but not the most-held match: the easy way to buy a copy by mistake.
 export function searchNote(q: string, top: DirToken, picked: { currency: string; issuer: string }, pickedHolders?: number): string | null {

@@ -121,9 +121,7 @@ export function useExitGuard() {
   }
 
   // Check any token on either network. Read-only: it never buys.
-  async function checkToken(req: BuyRequest, net: Net, searched?: Searched) {
-    // The demo agent only exists on testnet. On mainnet there is no wallet of ours to look at.
-    const wallet = net === 'testnet' ? (demo?.agent.address ?? null) : null
+  async function checkToken(req: BuyRequest, net: Net, searched?: Searched, wallet: string | null = null) {
     const id = add({ mode: 'check', net, wallet, req, searched, status: 'checking' }, true)
     // Directory facts (mainnet only) load next to the ledger read. They never change the verdict.
     if (net === 'mainnet') void loadDirectory(id, req.token)
@@ -137,7 +135,7 @@ export function useExitGuard() {
 
   // Try a read again after it failed. Never repeats a buy.
   function retry(e: Entry) {
-    if (e.mode === 'check') return void checkToken(e.req, e.net, e.searched)
+    if (e.mode === 'check') return void checkToken(e.req, e.net, e.searched, e.wallet)
     void agentBuy(e.req, e.station)
   }
 
