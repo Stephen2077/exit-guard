@@ -32,6 +32,7 @@ export default function App() {
   const [selected, setSelected] = useState<number | 'honeypot' | null>(null)
   const [txs, setTxs] = useState<TxRecord[]>([])
   const [hp, setHp] = useState<Honeypot | null>(null)
+  const [flip, setFlip] = useState(false)
   const nextId = useRef(1)
 
   useEffect(() => {
@@ -63,10 +64,10 @@ export default function App() {
     patch(id, { status: ok ? 'bought' : 'failed', txs: sent })
   }
 
-  async function check(req: BuyRequest): Promise<number> {
+  async function check(req: BuyRequest, select = true): Promise<number> {
     const id = nextId.current++
     setEntries(es => [{ id, time: now(), req, status: 'checking', txs: [] }, ...es])
-    setSelected(id)
+    if (select) setSelected(id)
     try {
       const snapshot = await getSnapshot(req.token, demo!.agent.address)
       const decision = evaluate(snapshot, req)
@@ -114,8 +115,12 @@ export default function App() {
       Object.assign(state, { agentSell, buyerBuy, running: false })
       record([agentSell, buyerBuy])
       setHp({ ...state })
-      await check({ token: d.SCAM, amountXrp: 2 })
-      setSelected('honeypot')
+      // The one bold moment: the page goes dark for a beat when the trap closes.
+      if (agentSell.result !== 'tesSUCCESS') {
+        setFlip(true)
+        setTimeout(() => setFlip(false), 2500)
+      }
+      await check({ token: d.SCAM, amountXrp: 2 }, false)
     } catch (e) {
       setHp({ ...state, running: false, error: (e as Error).message })
     }
@@ -142,9 +147,12 @@ export default function App() {
   const busy = settingUp || hp?.running || entries.some(e => e.status === 'checking' || e.status === 'executing')
 
   return (
-    <div className="app">
+    <div className={`app ${flip ? 'flip' : ''}`}>
       <header className="top">
         <div className="brand">Exit Guard</div>
+        <div className="built-on">
+          built on <img src="/brand/xrpl-tertiary-black.svg" alt="XRPL" height={20} />
+        </div>
         <div className="tagline">Checks if an AI agent can sell a token before it buys it.</div>
         <div className="net">
           <span className={`dot ${online === null ? '' : online ? 'on' : 'off'}`} />

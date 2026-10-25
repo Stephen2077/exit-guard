@@ -14,6 +14,23 @@ function Lane({ title, tx, okText, badText }: { title: string; tx?: TxRecord; ok
   )
 }
 
+function TrustLine({ frozen }: { frozen: boolean }) {
+  return (
+    <div className={`trustline ${frozen ? 'frozen' : ''}`}>
+      <span className="trustline-label">Agent's SCM holding</span>
+      <span className="trustline-state">
+        {frozen && (
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true">
+            <rect x="3" y="7" width="10" height="8" rx="1.5" fill="currentColor" />
+            <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.8" fill="none" />
+          </svg>
+        )}
+        {frozen ? 'Frozen · agent only' : 'Normal'}
+      </span>
+    </div>
+  )
+}
+
 export function HoneypotView({ hp, onUnfreeze }: { hp: Honeypot; onUnfreeze: () => void }) {
   return (
     <section className="card">
@@ -29,6 +46,7 @@ export function HoneypotView({ hp, onUnfreeze }: { hp: Honeypot; onUnfreeze: () 
         </li>
         <li>
           The SCM issuer freezes <b>only the agent's</b> SCM.
+          <TrustLine frozen={hp.freeze?.result === 'tesSUCCESS'} />
           {hp.freeze && <ul className="tx-list"><TxRow tx={hp.freeze} /></ul>}
         </li>
         <li>Both try to trade at the same moment:</li>

@@ -1,7 +1,25 @@
-import type { Check, Outcome } from '../engine/policy'
+import { exitCost } from '../engine/amm'
+import { DEFAULT_POLICY, type Check, type Outcome } from '../engine/policy'
 import type { Entry } from '../App'
 import { TxRow } from './Evidence'
 import { short } from './format'
+
+// Small bar under the exit-cost row: how far this trade's exit cost is toward the approval and block lines.
+const METER_MAX = 0.3
+function ExitMeter({ cost, status }: { cost: number; status: Check['status'] }) {
+  const at = (x: number) => `${Math.min(x / METER_MAX, 1) * 100}%`
+  return (
+    <div className="meter" aria-hidden="true">
+      <div className={`meter-fill ${status}`} style={{ width: at(cost) }} />
+      <div className="meter-mark" style={{ left: at(DEFAULT_POLICY.warnExitCost) }}>
+        <span>ask {DEFAULT_POLICY.warnExitCost * 100}%</span>
+      </div>
+      <div className="meter-mark" style={{ left: at(DEFAULT_POLICY.maxExitCost) }}>
+        <span>block {DEFAULT_POLICY.maxExitCost * 100}%</span>
+      </div>
+    </div>
+  )
+}
 
 const VERDICT: Record<Outcome, { icon: string; title: string; sub: string }> = {
   ALLOW: { icon: '✓', title: 'ALLOW', sub: 'Safe and small. The agent buys automatically.' },
@@ -14,8 +32,9 @@ const STATUS_ICON: Record<Check['status'], string> = { pass: '✓', warn: '!', f
 type Props = { entry: Entry; busy: boolean; onApprove: () => void; onReject: () => void }
 
 export function RiskCard({ entry, busy, onApprove, onReject }: Props) {
-  const { req, decision, status } = entry
+  const { req, decision, status, snapshot } = entry
   const v = decision && VERDICT[decision.outcome]
+  const cost = snapshot?.pool ? exitCost(snapshot.pool, req.amountXrp).cost : null
 
   return (
     <section className="card">
@@ -46,7 +65,10 @@ export function RiskCard({ entry, busy, onApprove, onReject }: Props) {
               <tr key={c.id} className={c.status}>
                 <td className="rule">{c.id}</td>
                 <td className="check-label">{c.label}</td>
-                <td className="check-detail">{c.detail}</td>
+                <td className="check-detail">
+                  {c.detail}
+                  {c.id === 'R5' && cost !== null && Number.isFinite(cost) && <ExitMeter cost={cost} status={c.status} />}
+                </td>
                 <td className="check-status">{STATUS_ICON[c.status]}</td>
               </tr>
             ))}
