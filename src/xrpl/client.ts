@@ -1,0 +1,54 @@
+import { Client, type SubmittableTransaction, type Wallet } from 'xrpl'
+
+// Set VITE_XRPL_WS in .env to use a QuickNode testnet endpoint.
+export const NETWORK: string = import.meta.env.VITE_XRPL_WS ?? 'wss://s.altnet.rippletest.net:51233'
+export const EXPLORER = 'https://testnet.xrpl.org/transactions/'
+
+const client = new Client(NETWORK)
+let connecting: Promise<void> | null = null
+
+export async function getClient(): Promise<Client> {
+  if (!client.isConnected()) {
+    connecting ??= client.connect().finally(() => (connecting = null))
+    await connecting
+  }
+  return client
+}
+
+export type TxRecord = {
+  label: string
+  type: string
+  hash?: string
+  ledger?: number
+  result: string
+  validated: boolean
+}
+
+type TxInput = { TransactionType: string } & Record<string, unknown>
+
+export async function send(label: string, wallet: Wallet, tx: TxInput): Promise<TxRecord> {
+  const c = await getClient()
+  try {
+    const full = { ...tx, Account: wallet.address } as unknown as SubmittableTransaction
+    const r = await c.submitAndWait(full, { wallet, autofill: true })
+    const meta = r.result.meta
+    return {
+      label,
+      type: tx.TransactionType,
+      hash: r.result.hash,
+      ledger: r.result.ledger_index,
+      result: typeof meta === 'object' && meta ? meta.TransactionResult : 'unknown',
+      validated: !!r.result.validated,
+    }
+  } catch (e) {
+    const err = e as { data?: { engine_result?: string }; message?: string }
+    return { label, type: tx.TransactionType, result: `ERROR ${err.data?.engine_result ?? err.message}`, validated: false }
+  }
+}
+
+// For setup steps: anything but success is a bug, so stop.
+export async function mustSend(label: string, wallet: Wallet, tx: TxInput): Promise<TxRecord> {
+  const r = await send(label, wallet, tx)
+  if (r.result !== 'tesSUCCESS') throw new Error(`${label} failed: ${r.result}`)
+  return r
+}
