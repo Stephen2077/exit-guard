@@ -320,6 +320,7 @@ export async function agentFromBody(raw: unknown, env: Env): Promise<Reply> {
     steps,
     net: NET,
     amountXrp,
+    intent,
     token,
     outcome,
     checks,

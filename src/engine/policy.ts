@@ -57,7 +57,7 @@ export function evaluate(s: Snapshot, req: BuyRequest, p: Policy = DEFAULT_POLIC
 
   if (s.noFreeze) add('R2', 'Can freeze later', 'pass', 'Issuer gave up freezing forever.')
   else if (trusted) add('R2', 'Can freeze later', 'pass', 'Issuer can freeze, but is on your trusted list.')
-  else add('R2', 'Can freeze later', 'warn', 'Issuer can freeze your tokens at any time.')
+  else add('R2', 'Can freeze later', 'warn', 'Issuer kept the power to freeze. Most regulated stablecoins keep it too.')
 
   if (!s.clawback) add('R3', 'Can take tokens back', 'pass', 'Issuer cannot claw back.')
   // A regulated stablecoin keeps clawback for compliance: a human should know, but it is not a trap.

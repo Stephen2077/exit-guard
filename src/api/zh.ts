@@ -16,7 +16,7 @@ export function ruleZh(c: Check, s: Snapshot, req: BuyRequest): string {
       return s.globalFreeze ? '发币方冻结了全部交易，谁都卖不出。' : '发币方冻结了这个钱包里的币，你卖不出。'
     case 'R2':
       if (s.noFreeze) return '发币方已永久放弃冻结权。'
-      return trusted ? '发币方能冻结，但在你的可信名单上。' : '发币方随时能冻结你的币。'
+      return trusted ? '发币方能冻结，但在你的可信名单上。' : '发币方保留了冻结权，多数合规稳定币也会保留。'
     case 'R3':
       if (!s.clawback) return '发币方不能收回你的币。'
       return trusted ? '开了收回功能。发币方是你可信名单上的受监管稳定币。' : '发币方能从你的钱包里收走币。'

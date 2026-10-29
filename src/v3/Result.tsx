@@ -93,6 +93,19 @@ function Action({ r, h }: { r: AgentResult; h: Handlers }) {
         </div>
       </div>
     )
+  if (r.outcome === 'REQUIRE_APPROVAL' && r.intent === 'check')
+    return (
+      <div className="act">
+        <p className="act-line">
+          {t('This was a check only, so there is nothing to approve. If an agent asks to buy this token, a person must approve it first.', '这次只是检查，没有要买，所以不需要批准。如果代理要买这个币，必须先由人批准。')}
+        </p>
+        <div className="act-row">
+          <button className="ghost" onClick={h.onAnother}>
+            {t('Check another token', '换一个币')}
+          </button>
+        </div>
+      </div>
+    )
   if (r.outcome === 'REQUIRE_APPROVAL') {
     const pctSure = Math.round((r.action.confidence ?? 0) * 100)
     const overridden = r.action.by === 'jev' && r.action.jevChoice && r.action.jevChoice !== r.action.choice
