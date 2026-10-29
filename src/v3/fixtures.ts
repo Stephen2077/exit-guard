@@ -48,7 +48,7 @@ export const DENY: AgentResult = {
   outcome: 'DENY',
   checks: [
     { id: 'R1', label: 'Frozen now', status: 'pass', detail: 'Not frozen.', ledger: 'globalFreeze: false' },
-    { id: 'R2', label: 'Can freeze later', status: 'warn', detail: 'Issuer can freeze your tokens at any time.', ledger: 'noFreeze: false' },
+    { id: 'R2', label: 'Can freeze later', status: 'warn', detail: 'Issuer kept the power to freeze. Most regulated stablecoins keep it too.', ledger: 'noFreeze: false' },
     { id: 'R3', label: 'Can take tokens back', status: 'fail', detail: 'Issuer can pull tokens out of your wallet.', ledger: 'allowTrustLineClawback: true' },
     { id: 'R4', label: 'Holder concentration', status: 'warn', detail: 'One wallet holds 100% of supply.', ledger: 'largest other holder: 100%' },
     { id: 'R5', label: 'Exit cost', status: 'fail', detail: 'Selling what you buy costs 22.5% vs market.', ledger: 'AMM 5,000 SCM / 5 XRP · fee 0.5%' },

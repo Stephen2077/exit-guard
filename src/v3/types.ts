@@ -27,6 +27,7 @@ export type AgentResult = {
   steps: Step[]
   net: 'mainnet' | 'testnet'
   amountXrp: number
+  intent?: 'check' | 'buy' | 'what_if' // "check": nobody asked to buy, so there is nothing to approve
   token?: { name: string; currency: string; issuer: string }
   candidates?: Candidate[] // set when the token is ambiguous and a person must pick
   outcome?: Outcome
